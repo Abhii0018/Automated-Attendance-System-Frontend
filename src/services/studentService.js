@@ -36,6 +36,15 @@ const studentService = {
     const response = await api.get("/students/me");
     return response.data;
   },
+
+  // Admin: assign student to section
+  assignSection: async (studentId, semester, section) => {
+    const response = await api.post(`/students/${studentId}/assign-section`, {
+      semester,
+      section,
+    });
+    return response.data;
+  },
 };
 
 export default studentService;

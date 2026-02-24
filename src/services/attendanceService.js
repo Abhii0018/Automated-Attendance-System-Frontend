@@ -4,11 +4,13 @@
 import api from "./api";
 
 const attendanceService = {
+  // Teacher/Admin: submit section attendance
   markAttendance: async (attendanceData) => {
-    const response = await api.post("/attendance/mark", attendanceData);
+    const response = await api.post("/attendance", attendanceData);
     return response.data;
   },
 
+  // Admin: get aggregated attendance for a section
   getAttendanceBySection: async (section, date, subject) => {
     const response = await api.get("/attendance/section", {
       params: { section, date, subject },
@@ -16,6 +18,21 @@ const attendanceService = {
     return response.data;
   },
 
+  // Teacher/Admin: get students for a semester + section
+  getSectionStudents: async (semester, section) => {
+    const response = await api.get("/attendance/section/students", {
+      params: { semester, section },
+    });
+    return response.data;
+  },
+
+  // Teacher: dashboard overview (sections, stats, history)
+  getTeacherOverview: async () => {
+    const response = await api.get("/attendance/teacher/overview");
+    return response.data;
+  },
+
+  // Student/Admin analytics (placeholders kept for future use)
   getStudentAttendance: async (studentId, params = {}) => {
     const response = await api.get(`/attendance/student/${studentId}`, {
       params,

@@ -10,19 +10,21 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 
 // Admin
-import AdminDashboard    from "./pages/admin/AdminDashboard";
-import CreateStudent     from "./pages/admin/CreateStudent";
-import StudentsList      from "./pages/admin/StudentsList";
-import StudentAnalytics  from "./pages/admin/StudentAnalytics";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import CreateStudent from "./pages/admin/CreateStudent";
+import StudentsList from "./pages/admin/StudentsList";
+import StudentAnalytics from "./pages/admin/StudentAnalytics";
 import SectionAttendance from "./pages/admin/SectionAttendance";
+import TakeAdmission from "./pages/admin/TakeAdmission";
+
 
 // Teacher
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
-import MarkAttendance   from "./pages/teacher/MarkAttendance";
+import MarkAttendance from "./pages/teacher/MarkAttendance";
 
 // Student
 import StudentDashboard from "./pages/student/StudentDashboard";
-import Profile          from "./pages/student/Profile";
+import Profile from "./pages/student/Profile";
 
 const App = () => {
   return (
@@ -32,8 +34,9 @@ const App = () => {
         <Routes>
 
           {/* ── Public ── */}
-          <Route path="/"         element={<Landing />}  />
-          <Route path="/login"    element={<Login />}    />
+          <Route path="/" element={<Landing />} />
+          <Route path="/landing" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
           {/* ── Admin ── */}
@@ -58,7 +61,18 @@ const App = () => {
             }
           />
           <Route
+            path="/admin/take-admission"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <TakeAdmission />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/admin/students"
+
             element={
               <ProtectedRoute>
                 <RoleRoute allowedRoles={["admin"]}>

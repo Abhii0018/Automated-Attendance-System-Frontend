@@ -6,10 +6,11 @@ import useAuth from "../hooks/useAuth";
 const NAV_LINKS = {
   admin: [
     { to: "/admin/dashboard", label: "Dashboard" },
+    { to: "/admin/take-admission", label: "Take Admission" },
     { to: "/admin/students", label: "Students" },
-    { to: "/admin/create-student", label: "Create Student" },
     { to: "/admin/section-attendance", label: "Section" },
   ],
+
   teacher: [
     { to: "/teacher/dashboard", label: "Dashboard" },
     { to: "/teacher/mark-attendance", label: "Mark Attendance" },
@@ -45,7 +46,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     logout();
-    navigate("/");
+    navigate("/login");
   };
 
   const links = user ? NAV_LINKS[user.role] || [] : [];
@@ -84,11 +85,10 @@ const Navbar = () => {
               <Link
                 key={link.to}
                 to={link.to}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isActive(link.to)
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${isActive(link.to)
                     ? "bg-blue-500/15 text-blue-400 border border-blue-500/20"
                     : "text-slate-400 hover:text-white hover:bg-white/5"
-                }`}
+                  }`}
               >
                 {link.label}
               </Link>
@@ -142,11 +142,10 @@ const Navbar = () => {
                 key={link.to}
                 to={link.to}
                 onClick={() => setMobileOpen(false)}
-                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isActive(link.to)
+                className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive(link.to)
                     ? "bg-blue-500/15 text-blue-400"
                     : "text-slate-400 hover:text-white hover:bg-white/5"
-                }`}
+                  }`}
               >
                 {link.label}
               </Link>

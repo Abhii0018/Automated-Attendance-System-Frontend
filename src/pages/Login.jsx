@@ -1,188 +1,194 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { gsap } from "gsap";
 import useAuth from "../hooks/useAuth";
 import { ROLE_REDIRECTS } from "../utils/constants";
+import loginBg from "../assets/login.jpeg";
+
+// ─── Theme (matches Landing page) ────────────────────────────────────────────
+const navy = "#0a1628";
+const navyMid = "#102040";
+const gold = "#c9a84c";
+const goldL = "#e8c96a";
+const light = "#f4f6fa";
+const border = "#dde3ef";
+const mid = "#6b7280";
+
+// ─── Responsive CSS ───────────────────────────────────────────────────────────
+const RESP_CSS = `
+  .auth-split { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
+  @media (max-width: 768px) {
+    .auth-split { grid-template-columns: 1fr !important; }
+    .auth-img-panel { display: none !important; }
+    .auth-form-panel { padding: 40px 24px !important; }
+  }
+`;
 
 const Login = () => {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
-  const { login, loading, isAuthenticated, user } = useAuth();
+  const [showPw, setShowPw] = useState(false);
+  const { login, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const justRegistered = location.state?.registered === true;
-  const cardRef = useRef(null);
-  const orbRef = useRef(null);
 
-  // Redirect if already authenticated
+  // Inject responsive CSS
   useEffect(() => {
-    if (isAuthenticated && user?.role) {
-      const role = user.role.toLowerCase();
-      navigate(ROLE_REDIRECTS[role] || "/", { replace: true });
+    const id = "auth-resp-css";
+    if (!document.getElementById(id)) {
+      const el = document.createElement("style");
+      el.id = id; el.textContent = RESP_CSS;
+      document.head.appendChild(el);
     }
-  }, [isAuthenticated, user, navigate]);
-
-  // Animation
-  useEffect(() => {
-    gsap.fromTo(
-      cardRef.current,
-      { opacity: 0, y: 30, scale: 0.97 },
-      { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }
-    );
-
-    gsap.to(orbRef.current, {
-      x: 30,
-      y: -20,
-      duration: 6,
-      repeat: -1,
-      yoyo: true,
-      ease: "sine.inOut",
-    });
+    return () => document.getElementById(id)?.remove();
   }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-
     try {
-      console.log("📤 Attempting login with:", form);
-
       const data = await login(form.email, form.password);
-
-      console.log("✅ Login success:", data);
-
       const role = data?.user?.role?.toLowerCase();
-
-      navigate(ROLE_REDIRECTS[role] || "/", { replace: true });
-
+      navigate(ROLE_REDIRECTS[role] || "/");
     } catch (err) {
-      console.error("❌ Login error:", err);
-
-      if (err.response) {
-        setError(
-          err.response.data?.message ||
-          "Login failed due to server validation."
-        );
-      } else {
-        setError(
-          err.message ||
-          "Network error. Please check your connection."
-        );
-      }
+      setError(
+        err.response?.data?.message ||
+        err.message ||
+        "Login failed. Please check your credentials."
+      );
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#06070a] flex items-center justify-center px-4 relative overflow-hidden">
+    <div className="auth-split" style={{ fontFamily: "'Segoe UI','Inter',Arial,sans-serif" }}>
 
-      {/* Background Orb */}
-      <div
-        ref={orbRef}
-        className="absolute top-1/4 left-1/3 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"
-      />
+      {/* ── LEFT: Image Panel ── */}
+      <div className="auth-img-panel" style={{ position: "relative", overflow: "hidden" }}>
+        <img src={loginBg} alt="University" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }} />
+        {/* Dark gradient overlay */}
+        <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${navy}ee 0%, rgba(10,22,40,0.55) 100%)` }} />
+        {/* Gold top accent bar */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(to right, ${gold}, ${goldL}, ${gold})` }} />
 
-      <div ref={cardRef} className="w-full max-w-md opacity-0">
-
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2.5 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"
-                />
-              </svg>
-            </div>
-            <span className="font-bold text-xl text-white">AttendX</span>
-          </Link>
-
-          <h1 className="font-bold text-2xl text-white">Welcome back</h1>
-          <p className="text-slate-500 mt-2 text-sm">
-            Sign in to your account
-          </p>
+        {/* Branding */}
+        <div style={{ position: "absolute", top: "40px", left: "40px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ width: "44px", height: "44px", background: gold, borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px" }}>🎓</div>
+          <div>
+            <div style={{ color: "#fff", fontWeight: 900, fontSize: "18px" }}>AttendX</div>
+            <div style={{ color: gold, fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase" }}>University Portal</div>
+          </div>
         </div>
 
-        {/* Card */}
-        <div className="bg-[#151820] border border-white/5 rounded-2xl p-8">
+        {/* Bottom quote */}
+        <div style={{ position: "absolute", bottom: "48px", left: "40px", right: "40px" }}>
+          <div style={{ width: "48px", height: "3px", background: gold, borderRadius: "2px", marginBottom: "20px" }} />
+          <p style={{ color: "rgba(255,255,255,0.9)", fontSize: "22px", fontWeight: 700, lineHeight: 1.4, margin: "0 0 12px" }}>
+            "Education is the most powerful weapon you can use to change the world."
+          </p>
+          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "13px" }}>— Nelson Mandela</p>
 
-          {/* Success banner after registration */}
-          {justRegistered && (
-            <div className="mb-5 px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-2">
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Account created! Please sign in to continue.
-            </div>
-          )}
-
-          {/* Error */}
-          {error && (
-            <div className="mb-5 px-4 py-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-
-            <div>
-              <label className="block text-sm text-slate-400 mb-2">
-                Email address
-              </label>
-              <input
-                type="email"
-                className="w-full bg-[#0d0f14] border border-slate-700 focus:border-blue-500 text-slate-100 rounded-lg px-4 py-3 outline-none text-sm"
-                placeholder="you@school.edu"
-                value={form.email}
-                onChange={(e) =>
-                  setForm({ ...form, email: e.target.value })
-                }
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm text-slate-400 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                className="w-full bg-[#0d0f14] border border-slate-700 focus:border-blue-500 text-slate-100 rounded-lg px-4 py-3 outline-none text-sm"
-                placeholder="••••••••"
-                value={form.password}
-                onChange={(e) =>
-                  setForm({ ...form, password: e.target.value })
-                }
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 text-white font-semibold transition-all duration-200"
-            >
-              {loading ? "Signing in..." : "Sign in"}
-            </button>
-
-          </form>
-
-          <div className="mt-6 pt-5 border-t border-white/5 text-center">
-            <p className="text-slate-500 text-sm">
-              Don't have an account?{" "}
-              <Link
-                to="/register"
-                className="text-blue-400 hover:text-blue-300"
-              >
-                Create one
-              </Link>
-            </p>
+          {/* Mini stats */}
+          <div style={{ display: "flex", gap: "28px", marginTop: "32px" }}>
+            {[["10K+", "Students"], ["500+", "Faculty"], ["98%", "Accuracy"]].map(([v, l]) => (
+              <div key={l}>
+                <div style={{ color: gold, fontWeight: 900, fontSize: "22px" }}>{v}</div>
+                <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "11px", marginTop: "2px" }}>{l}</div>
+              </div>
+            ))}
           </div>
-
         </div>
       </div>
+
+      {/* ── RIGHT: Form Panel ── */}
+      <div className="auth-form-panel" style={{ background: light, display: "flex", flexDirection: "column", justifyContent: "center", padding: "60px 56px", overflowY: "auto" }}>
+
+        {/* Mobile logo (hidden on desktop via CSS) */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "32px" }}>
+          <div style={{ width: "40px", height: "40px", background: gold, borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>🎓</div>
+          <div>
+            <div style={{ color: navy, fontWeight: 900, fontSize: "16px" }}>AttendX</div>
+            <div style={{ color: gold, fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase" }}>University Portal</div>
+          </div>
+        </div>
+
+        <h1 style={{ fontSize: "30px", fontWeight: 900, color: navy, margin: "0 0 6px", lineHeight: 1.2 }}>Welcome Back</h1>
+        <p style={{ color: mid, fontSize: "15px", margin: "0 0 32px" }}>Sign in to your portal to continue</p>
+
+        {/* Success banner */}
+        {justRegistered && (
+          <div style={{ background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: "10px", padding: "12px 16px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "16px" }}>✅</span>
+            <span style={{ color: "#065f46", fontSize: "14px", fontWeight: 500 }}>Account created! Please sign in to continue.</span>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "10px", padding: "12px 16px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "16px" }}>⚠️</span>
+            <span style={{ color: "#991b1b", fontSize: "14px" }}>{error}</span>
+          </div>
+        )}
+
+        {/* Form Card */}
+        <div style={{ background: "#fff", borderRadius: "16px", padding: "36px", boxShadow: "0 4px 30px rgba(10,22,40,0.08)", border: `1px solid ${border}` }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+            {/* Email */}
+            <div>
+              <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: navy, marginBottom: "7px" }}>Email Address</label>
+              <input
+                type="email" required
+                placeholder="you@university.edu"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                style={{ width: "100%", padding: "12px 14px", borderRadius: "8px", border: `1.5px solid ${border}`, fontSize: "14px", color: navy, background: "#fff", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }}
+                onFocus={e => e.target.style.borderColor = gold}
+                onBlur={e => e.target.style.borderColor = border}
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: navy, marginBottom: "7px" }}>Password</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type={showPw ? "text" : "password"} required
+                  placeholder="••••••••"
+                  value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  style={{ width: "100%", padding: "12px 44px 12px 14px", borderRadius: "8px", border: `1.5px solid ${border}`, fontSize: "14px", color: navy, background: "#fff", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }}
+                  onFocus={e => e.target.style.borderColor = gold}
+                  onBlur={e => e.target.style.borderColor = border}
+                />
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: mid, fontSize: "16px" }}>
+                  {showPw ? "🙈" : "👁️"}
+                </button>
+              </div>
+            </div>
+
+            {/* Submit */}
+            <button type="submit" disabled={loading}
+              style={{ width: "100%", padding: "14px", background: loading ? "#c9a84c99" : `linear-gradient(135deg, ${navy} 0%, ${navyMid} 100%)`, color: "#fff", border: "none", borderRadius: "9px", fontSize: "15px", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s", letterSpacing: "0.3px", marginTop: "4px" }}>
+              {loading ? "Signing In…" : "Sign In →"}
+            </button>
+          </form>
+
+          <div style={{ marginTop: "22px", paddingTop: "18px", borderTop: `1px solid ${border}`, textAlign: "center" }}>
+            <p style={{ fontSize: "13px", color: mid }}>
+              Don't have an account?{" "}
+              <Link to="/register" style={{ color: navy, fontWeight: 700, textDecoration: "none", borderBottom: `2px solid ${gold}`, paddingBottom: "1px" }}>Create one →</Link>
+            </p>
+          </div>
+        </div>
+
+        {/* Back to home */}
+        <div style={{ marginTop: "24px", textAlign: "center" }}>
+          <Link to="/" style={{ color: mid, fontSize: "13px", textDecoration: "none" }}>← Back to Homepage</Link>
+        </div>
+      </div>
+
     </div>
   );
 };
