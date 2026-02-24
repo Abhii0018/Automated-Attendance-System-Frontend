@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { gsap } from "gsap";
 import useAuth from "../hooks/useAuth";
 import { ROLE_REDIRECTS } from "../utils/constants";
@@ -9,6 +9,8 @@ const Login = () => {
   const [error, setError] = useState("");
   const { login, loading, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const justRegistered = location.state?.registered === true;
   const cardRef = useRef(null);
   const orbRef = useRef(null);
 
@@ -105,6 +107,16 @@ const Login = () => {
 
         {/* Card */}
         <div className="bg-[#151820] border border-white/5 rounded-2xl p-8">
+
+          {/* Success banner after registration */}
+          {justRegistered && (
+            <div className="mb-5 px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-2">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Account created! Please sign in to continue.
+            </div>
+          )}
 
           {/* Error */}
           {error && (

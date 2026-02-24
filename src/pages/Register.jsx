@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { gsap } from "gsap";
 import useAuth from "../hooks/useAuth";
-import { ROLE_REDIRECTS, SECTIONS } from "../utils/constants";
+import { SECTIONS } from "../utils/constants";
 
 const Register = () => {
   const [form, setForm] = useState({
@@ -31,68 +31,70 @@ const Register = () => {
   }, []);
 
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError("");
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
 
-  // 🔐 Frontend validation (match backend rules)
-  if (form.password.length < 8) {
-    setError("Password must be at least 8 characters.");
-    return;
-  }
-
-  if (!/[A-Z]/.test(form.password)) {
-    setError("Password must contain at least one uppercase letter.");
-    return;
-  }
-
-  if (form.role === "student" && !form.section) {
-    setError("Please select a section.");
-    return;
-  }
-
-  try {
-    const payload = { ...form };
-
-    if (form.role !== "student") {
-      delete payload.section;
+    // 🔐 Frontend validation (match backend rules)
+    if (form.password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
     }
 
-    console.log("📤 Sending payload:", payload);
+    if (!/[A-Z]/.test(form.password)) {
+      setError("Password must contain at least one uppercase letter.");
+      return;
+    }
 
-    const data = await register(payload);
+    if (form.role === "student" && !form.section) {
+      setError("Please select a section.");
+      return;
+    }
 
-    console.log("✅ Register success:", data);
+    try {
+      const payload = { ...form };
 
-    // Safe navigation
-    const role = data?.user?.role?.toLowerCase();
-    navigate(ROLE_REDIRECTS[role] || "/", { replace: true });
+      if (form.role !== "student") {
+        delete payload.section;
+      }
 
-  } catch (err) {
-    console.error("❌ Full register error:", err);
+      console.log("📤 Sending payload:", payload);
 
-    if (err.response) {
-      console.error("📥 Server response:", err.response.data);
+      const data = await register(payload);
 
-      if (err.response.data?.errors) {
-        setError(
-          err.response.data.errors.map(e => e.msg).join(", ")
-        );
+      console.log("✅ Register success:", data);
+
+      // Always go to login — user must sign in manually
+      navigate("/login", {
+        replace: true,
+        state: { registered: true },
+      });
+
+    } catch (err) {
+      console.error("❌ Full register error:", err);
+
+      if (err.response) {
+        console.error("📥 Server response:", err.response.data);
+
+        if (err.response.data?.errors) {
+          setError(
+            err.response.data.errors.map(e => e.msg).join(", ")
+          );
+        } else {
+          setError(
+            err.response.data?.message ||
+            "Registration failed due to server validation."
+          );
+        }
       } else {
+        // Network error or server unreachable
         setError(
-          err.response.data?.message ||
-          "Registration failed due to server validation."
+          err.message ||
+          "Unexpected network error during registration."
         );
       }
-    } else {
-      // Network error or server unreachable
-      setError(
-        err.message ||
-        "Unexpected network error during registration."
-      );
     }
-  }
-};
+  };
 
   return (
     <div className="min-h-screen bg-[#06070a] flex items-center justify-center px-4 py-12 relative overflow-hidden">

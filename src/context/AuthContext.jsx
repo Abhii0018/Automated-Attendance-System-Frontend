@@ -29,10 +29,31 @@ export const AuthProvider = ({ children }) => {
   const [initializing, setInitializing] = useState(true);
 
   /*
-    Just initialize from storage.
-    Do NOT auto-call backend /auth/me.
+    On startup, validate the stored token by checking its expiry.
+    If expired or malformed, clear storage so isAuthenticated stays false.
   */
   useEffect(() => {
+    const storedToken = localStorage.getItem(TOKEN_KEY);
+    if (storedToken) {
+      try {
+        // Decode JWT payload (base64url → JSON) without a library
+        const payload = JSON.parse(atob(storedToken.split(".")[1]));
+        const nowSecs = Math.floor(Date.now() / 1000);
+        if (!payload.exp || payload.exp < nowSecs) {
+          // Token is expired — clear everything
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(USER_KEY);
+          setToken(null);
+          setUser(null);
+        }
+      } catch {
+        // Malformed token — clear it
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        setToken(null);
+        setUser(null);
+      }
+    }
     setInitializing(false);
   }, []);
 
@@ -49,46 +70,40 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = useCallback(async (email, password) => {
-  setLoading(true);
-  try {
-    const data = await authService.login(email, password);
+    setLoading(true);
+    try {
+      const data = await authService.login(email, password);
 
-    console.log("AuthContext received login data:", data);
+      if (!data || !data.token || !data.user) {
+        throw new Error("Invalid login response structure");
+      }
 
-    if (!data || !data.token || !data.user) {
-      throw new Error("Invalid login response structure");
+      // Normalize role to lowercase so RoleRoute comparisons always work
+      const normalizedUser = normalizeUser(data.user);
+
+      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(normalizedUser));
+
+      setToken(data.token);
+      setUser(normalizedUser);
+
+      // Return normalized user so Login.jsx redirect also uses lowercase role
+      return { ...data, user: normalizedUser };
+
+    } catch (error) {
+      console.error("AuthContext login error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
     }
-
-    localStorage.setItem(TOKEN_KEY, data.token);
-    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-
-    setToken(data.token);
-    setUser(data.user);
-
-    return data;
-
-  } catch (error) {
-    console.error("AuthContext login error:", error);
-    throw error;
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  }, []);
 
   const register = useCallback(async (userData) => {
     setLoading(true);
     try {
+      // Just create the account — do NOT auto-login.
+      // User will be redirected to /login and must sign in manually.
       const response = await authService.register(userData);
-
-      const tokenValue = response.data.token;
-      const normalizedUser = normalizeUser(response.data.user);
-
-      localStorage.setItem(TOKEN_KEY, tokenValue);
-      localStorage.setItem(USER_KEY, JSON.stringify(normalizedUser));
-
-      setToken(tokenValue);
-      setUser(normalizedUser);
-
       return response;
     } finally {
       setLoading(false);

@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import useAuth from "../hooks/useAuth";
+import { ROLE_REDIRECTS } from "../utils/constants";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -96,6 +98,8 @@ const ROLES = [
 ];
 
 const Landing = () => {
+  const { isAuthenticated, user } = useAuth();
+  const navigate = useNavigate();
   const taglineRef = useRef(null);
   const titleRef = useRef(null);
   const subRef = useRef(null);
@@ -103,6 +107,13 @@ const Landing = () => {
   const orb1Ref = useRef(null);
   const orb2Ref = useRef(null);
   const featuresRef = useRef(null);
+
+  // Redirect logged-in users straight to their dashboard
+  useEffect(() => {
+    if (isAuthenticated && user?.role) {
+      navigate(ROLE_REDIRECTS[user.role] || "/", { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
 
   useEffect(() => {
     // Floating orbs
@@ -118,9 +129,9 @@ const Landing = () => {
     // Hero entrance
     const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
     tl.fromTo(taglineRef.current, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7 })
-      .fromTo(titleRef.current,   { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.8 }, "-=0.3")
-      .fromTo(subRef.current,     { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7 }, "-=0.4")
-      .fromTo(ctaRef.current,     { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.6 }, "-=0.3");
+      .fromTo(titleRef.current, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.8 }, "-=0.3")
+      .fromTo(subRef.current, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7 }, "-=0.4")
+      .fromTo(ctaRef.current, { opacity: 0, y: 15 }, { opacity: 1, y: 0, duration: 0.6 }, "-=0.3");
 
     // Feature cards on scroll
     gsap.fromTo(
@@ -170,18 +181,29 @@ const Landing = () => {
             <span className="font-bold text-lg text-white">AttendX</span>
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="px-4 py-2 rounded-lg border border-slate-700 hover:border-blue-500/50 text-slate-300 hover:text-white text-sm transition-all duration-200"
-            >
-              Sign In
-            </Link>
-            <Link
-              to="/register"
-              className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-all duration-200"
-            >
-              Get Started
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                to={ROLE_REDIRECTS[user?.role] || "/"}
+                className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-all duration-200"
+              >
+                Go to Dashboard →
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="px-4 py-2 rounded-lg border border-slate-700 hover:border-blue-500/50 text-slate-300 hover:text-white text-sm transition-all duration-200"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/register"
+                  className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-all duration-200"
+                >
+                  Get Started
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -219,21 +241,35 @@ const Landing = () => {
         </p>
 
         <div ref={ctaRef} className="opacity-0 flex flex-col sm:flex-row items-center gap-4">
-          <Link
-            to="/register"
-            className="flex items-center gap-2 px-8 py-3.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25 group"
-          >
-            Start for free
-            <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-          </Link>
-          <Link
-            to="/login"
-            className="px-8 py-3.5 rounded-lg border border-slate-700 hover:border-blue-500/50 text-slate-300 hover:text-white text-base transition-all duration-200"
-          >
-            Sign in
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              to={ROLE_REDIRECTS[user?.role] || "/"}
+              className="flex items-center gap-2 px-8 py-3.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25 group"
+            >
+              Go to Dashboard
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </Link>
+          ) : (
+            <>
+              <Link
+                to="/register"
+                className="flex items-center gap-2 px-8 py-3.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/25 group"
+              >
+                Start for free
+                <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </Link>
+              <Link
+                to="/login"
+                className="px-8 py-3.5 rounded-lg border border-slate-700 hover:border-blue-500/50 text-slate-300 hover:text-white text-base transition-all duration-200"
+              >
+                Sign in
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Stats */}
@@ -333,15 +369,27 @@ const Landing = () => {
           <p className="text-slate-400 mb-10">
             Join institutions already using AttendX to transform how they track attendance.
           </p>
-          <Link
-            to="/register"
-            className="inline-flex items-center gap-2 px-10 py-4 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base transition-all duration-200 group"
-          >
-            Create your account
-            <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              to={ROLE_REDIRECTS[user?.role] || "/"}
+              className="inline-flex items-center gap-2 px-10 py-4 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base transition-all duration-200 group"
+            >
+              Go to Dashboard
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </Link>
+          ) : (
+            <Link
+              to="/register"
+              className="inline-flex items-center gap-2 px-10 py-4 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-base transition-all duration-200 group"
+            >
+              Create your account
+              <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </Link>
+          )}
         </div>
       </section>
 
