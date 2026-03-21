@@ -185,7 +185,7 @@ const Register = () => {
               <div>
                 <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: navy, marginBottom: "6px" }}>Role</label>
                 <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value, section: "" })}
-                  style={{ ...inputStyle, appearance: "none", cursor: "pointer" }}>
+                  style={{ ...inputStyle, cursor: "pointer" }}>
                   <option value="student">Student</option>
                   <option value="teacher">Teacher</option>
                   <option value="admin">Admin</option>
@@ -195,7 +195,7 @@ const Register = () => {
                 <div>
                   <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: navy, marginBottom: "6px" }}>Section</label>
                   <select value={form.section} onChange={e => setForm({ ...form, section: e.target.value })} required
-                    style={{ ...inputStyle, appearance: "none", cursor: "pointer" }}>
+                    style={{ ...inputStyle, cursor: "pointer" }}>
                     <option value="">Select section</option>
                     {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
                   </select>

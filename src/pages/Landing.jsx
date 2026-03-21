@@ -156,7 +156,7 @@ const Landing = () => {
             <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px" }}>🎓</div>
             <div>
               <div style={{ color: C.white, fontWeight: 900, fontSize: "18px", letterSpacing: "0.5px" }}>AttendX</div>
-              <div style={{ color: C.gold, fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase" }}>University Portal</div>
+              <div style={{ color: C.gold, fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase" }}>ATTENDANCE OS</div>
             </div>
           </div>
 
@@ -223,19 +223,18 @@ const Landing = () => {
           <div style={{ position: "absolute", bottom: "-60px", right: "-60px", width: "300px", height: "300px", borderRadius: "50%", background: "rgba(201,168,76,0.07)", pointerEvents: "none" }} />
 
           <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(201,168,76,0.15)", border: `1px solid rgba(201,168,76,0.35)`, borderRadius: "30px", padding: "7px 18px", marginBottom: "28px", width: "fit-content" }}>
-            <span style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase" }}>🏫 Smart Attendance Management</span>
+            <span style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase" }}>⚡ Smart Campus Operations</span>
           </div>
 
           <h1 style={{ color: C.white, fontSize: "clamp(32px, 4vw, 58px)", fontWeight: 900, lineHeight: 1.1, margin: "0 0 12px", letterSpacing: "-1px" }}>
-            Welcome to
+            The Modern
           </h1>
           <h1 style={{ color: C.gold, fontSize: "clamp(32px, 4vw, 58px)", fontWeight: 900, lineHeight: 1.1, margin: "0 0 24px", letterSpacing: "-1px" }}>
-            AttendX University
+            Attendance OS
           </h1>
 
           <p style={{ color: "rgba(255,255,255,0.72)", fontSize: "16px", lineHeight: 1.8, margin: "0 0 36px", maxWidth: "440px" }}>
-            A unified digital platform empowering administrators, faculty, and students
-            with real-time attendance tracking, analytics, and automated insights.
+            A unified digital platform empowering modern institutions to automate tracking, scale academic analytics, and eliminate administrative overhead.
           </p>
 
           <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "44px" }}>
@@ -251,8 +250,8 @@ const Landing = () => {
 
           {/* Quick program badges */}
           <div className="land-quick-links" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "4px" }}>Explore</div>
-            {["Undergraduate Programs", "Graduate Programs", "Research & Academics"].map((t) => (
+            <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "4px" }}>Platform Modules</div>
+            {["System Administration", "Faculty Analytics Setup", "Student Access Layer"].map((t) => (
               <button key={t} onClick={() => scrollTo("programs")} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.78)", padding: "9px 18px", borderRadius: "6px", fontSize: "13px", cursor: "pointer", textAlign: "left", width: "fit-content", transition: "all 0.2s", fontWeight: 500 }}
                 onMouseEnter={e => { e.target.style.background = "rgba(201,168,76,0.15)"; e.target.style.borderColor = "rgba(201,168,76,0.4)"; e.target.style.color = C.gold; }}
                 onMouseLeave={e => { e.target.style.background = "rgba(255,255,255,0.06)"; e.target.style.borderColor = "rgba(255,255,255,0.14)"; e.target.style.color = "rgba(255,255,255,0.78)"; }}
@@ -282,12 +281,11 @@ const Landing = () => {
 
       {/* ════════════ ANNOUNCEMENT TICKER ════════════ */}
       <div style={{ background: C.gold, padding: "10px 28px", display: "flex", alignItems: "center", gap: "14px" }}>
-        <span style={{ background: C.navy, color: C.gold, padding: "3px 12px", borderRadius: "4px", fontSize: "11px", fontWeight: 800, letterSpacing: "1.5px", whiteSpace: "nowrap" }}>NOTICE</span>
+        <span style={{ background: C.navy, color: C.gold, padding: "3px 12px", borderRadius: "4px", fontSize: "11px", fontWeight: 800, letterSpacing: "1.5px", whiteSpace: "nowrap" }}>NEW</span>
         <marquee style={{ color: C.navy, fontSize: "13px", fontWeight: 600 }}>
-          &nbsp;&nbsp;📢 New semester attendance portal is live — register now!&nbsp;&nbsp;|&nbsp;&nbsp;
-          📅 Faculty training for AttendX scheduled Feb 28&nbsp;&nbsp;|&nbsp;&nbsp;
-          ⚠️ Students below 75% attendance will receive automatic alerts&nbsp;&nbsp;|&nbsp;&nbsp;
-          🎓 Graduate program registrations open — apply by March 15
+          &nbsp;&nbsp;🚀 AttendX v2.0 is live! Explore the drastically redesigned UI templates.&nbsp;&nbsp;|&nbsp;&nbsp;
+          📩 Automated low-attendance SMS functionality is now fully integrated.&nbsp;&nbsp;|&nbsp;&nbsp;
+          🔒 World-class JWT Auth ensures your academic data is safer than ever.
         </marquee>
       </div>
 
@@ -318,10 +316,10 @@ const Landing = () => {
               </div>
             </div>
             <div style={{ paddingLeft: "8px" }}>
-              <span style={S.badge}>About AttendX University</span>
-              <h2 style={S.h2}>Shaping Future Leaders with Precision & Accountability</h2>
-              <p style={S.para}>AttendX University is committed to delivering world-class education backed by cutting-edge administrative technology. Our Smart Attendance System ensures every session is tracked, every student is accounted for, and every teacher has the tools they need.</p>
-              <p style={S.para}>With three dedicated portals — for Admins, Teachers, and Students — our platform brings clarity, transparency, and efficiency to the heart of academic management.</p>
+              <span style={S.badge}>About AttendX</span>
+              <h2 style={S.h2}>Empowering Institutions with Precision & Accountability</h2>
+              <p style={S.para}>AttendX provides world-class educational organizations with cutting-edge academic administration software. Our proprietary tech guarantees every lecture is effortlessly logged, every student is accounted for, and your entire faculty is empowered.</p>
+              <p style={S.para}>With three secure, dedicated workspaces seamlessly connecting Administrators, Faculty, and Students — we deliver unparalleled operational clarity directly to the heart of your campus.</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", margin: "24px 0 32px" }}>
                 {["NAAC A+ Accredited", "ISO Certified", "100% Digital Campus"].map((h) => (
                   <span key={h} style={{ background: "#eef2fb", color: C.navy, padding: "7px 16px", borderRadius: "30px", fontSize: "13px", fontWeight: 600, border: `1px solid ${C.border}` }}>✓ {h}</span>
@@ -398,9 +396,9 @@ const Landing = () => {
         <img src={gradImg} alt="Graduates" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 30%" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, rgba(10,22,40,0.88) 0%, rgba(10,22,40,0.6) 100%)" }} />
         <div style={{ position: "relative", zIndex: 2, textAlign: "center", padding: "0 24px" }}>
-          <h2 style={{ color: C.white, fontSize: "clamp(26px,4vw,46px)", fontWeight: 900, margin: "0 0 16px", textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>Celebrating Academic Excellence</h2>
+          <h2 style={{ color: C.white, fontSize: "clamp(26px,4vw,46px)", fontWeight: 900, margin: "0 0 16px", textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>Engineered for Deep Academic Excellence</h2>
           <p style={{ color: "rgba(255,255,255,0.82)", fontSize: "17px", maxWidth: "540px", margin: "0 auto 32px", lineHeight: 1.7 }}>
-            Join thousands of students who've achieved their goals through disciplined learning and data-driven attendance management.
+            Join forward-thinking, technically driven institutions who trust the AttendX architecture to scale their student engagement to unprecedented heights.
           </p>
           <Link to="/register" style={S.btnGold}>Join Us Today →</Link>
         </div>
@@ -439,8 +437,8 @@ const Landing = () => {
             </div>
             <div>
               <span style={S.badge}>Faculty Experience</span>
-              <h2 style={{ ...S.h2, marginTop: "14px" }}>Tools That Let Teachers Teach</h2>
-              <p style={S.para}>Teachers get a focused interface to mark attendance in seconds, filter records by date and subject, and view class-level summaries without administrative overhead.</p>
+              <h2 style={{ ...S.h2, marginTop: "14px" }}>Let Educators Focus on Education</h2>
+              <p style={S.para}>Faculty members get a highly-optimized interface allowing them to reliably mark entire classrooms in mere seconds. Surface subject-level insights and drop the chaotic organizational paperwork.</p>
               <Link to="/login" style={{ ...S.btnNavy, marginTop: "24px", display: "inline-block" }}>Access Teacher Portal →</Link>
             </div>
           </div>
@@ -477,9 +475,9 @@ const Landing = () => {
           <div style={{ background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navyMid} 100%)`, borderRadius: "20px", padding: "70px 48px", textAlign: "center", boxShadow: "0 20px 60px rgba(10,22,40,0.2)", position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(to right, ${C.gold}, ${C.goldL}, ${C.gold})` }} />
             <span style={{ fontSize: "52px" }}>🎓</span>
-            <h2 style={{ color: C.white, fontSize: "clamp(26px,3vw,40px)", fontWeight: 900, margin: "16px 0 14px" }}>Ready to Modernize Attendance?</h2>
+            <h2 style={{ color: C.white, fontSize: "clamp(26px,3vw,40px)", fontWeight: 900, margin: "16px 0 14px" }}>Ready to Transform Your Campus?</h2>
             <p style={{ color: "rgba(255,255,255,0.65)", fontSize: "16px", maxWidth: "500px", margin: "0 auto 36px", lineHeight: 1.75 }}>
-              Join AttendX University's digital attendance revolution. Register today and experience the difference real-time tracking makes.
+              Launch your digital attendance revolution with the AttendX ecosystem. Dramatically streamline operations, automate faculty workflows, and boost your university's trajectory.
             </p>
             <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", justifyContent: "center" }}>
               {isAuthenticated ? (
@@ -504,7 +502,7 @@ const Landing = () => {
                 <div style={{ width: "40px", height: "40px", background: C.gold, borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>🎓</div>
                 <div>
                   <div style={{ color: C.white, fontWeight: 900, fontSize: "16px" }}>AttendX</div>
-                  <div style={{ color: C.gold, fontSize: "10px", letterSpacing: "2px" }}>UNIVERSITY PORTAL</div>
+                  <div style={{ color: C.gold, fontSize: "10px", letterSpacing: "2px" }}>ATTENDANCE OS</div>
                 </div>
               </div>
               <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "13px", lineHeight: 1.75, maxWidth: "240px" }}>Smart Attendance Management System for modern educational institutions.</p>
@@ -529,8 +527,8 @@ const Landing = () => {
             </div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "20px 0", color: "rgba(255,255,255,0.25)", fontSize: "12px", flexWrap: "wrap", gap: "8px" }}>
-            <span>© {new Date().getFullYear()} AttendX University. All rights reserved.</span>
-            <span>Smart Attendance System — Built for Excellence</span>
+            <span>© {new Date().getFullYear()} AttendX Software Inc. All rights reserved.</span>
+            <span>Enterprise Attendance Engineering</span>
           </div>
         </div>
       </footer>
