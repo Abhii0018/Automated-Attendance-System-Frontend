@@ -16,6 +16,7 @@ import StudentsList from "./pages/admin/StudentsList";
 import StudentAnalytics from "./pages/admin/StudentAnalytics";
 import SectionAttendance from "./pages/admin/SectionAttendance";
 import TakeAdmission from "./pages/admin/TakeAdmission";
+import TeachersList from "./pages/admin/TeachersList";
 
 
 // Teacher
@@ -66,6 +67,16 @@ const App = () => {
               <ProtectedRoute>
                 <RoleRoute allowedRoles={["admin"]}>
                   <TakeAdmission />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/teachers"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <TeachersList />
                 </RoleRoute>
               </ProtectedRoute>
             }

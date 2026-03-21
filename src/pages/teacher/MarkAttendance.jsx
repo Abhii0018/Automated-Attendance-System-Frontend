@@ -12,6 +12,7 @@ const MarkAttendance = () => {
   const [section, setSection] = useState("");
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
+  const [allowedSections, setAllowedSections] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -20,6 +21,22 @@ const MarkAttendance = () => {
 
   const todayStr = new Date().toISOString().split("T")[0];
   const todayFmt = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+  useEffect(() => {
+    const fetchAllowedSections = async () => {
+      try {
+        const res = await attendanceService.getTeacherOverview();
+        const data = res.data || res;
+        setAllowedSections(data.sections || []);
+      } catch (err) {
+        console.error("Failed to load assigned sections", err);
+      }
+    };
+    fetchAllowedSections();
+  }, []);
+
+  const availableSemesters = [...new Set(allowedSections.map(s => s.semester))];
+  const availableSections = allowedSections.filter(s => s.semester === Number(semester)).map(s => s.section);
 
   const handleLoadStudents = async (e) => {
     e.preventDefault();
@@ -145,7 +162,7 @@ const MarkAttendance = () => {
                   <select value={semester} onChange={e => setSemester(e.target.value)} required style={inputStyle}
                     onFocus={e => e.target.style.borderColor = C.gold} onBlur={e => e.target.style.borderColor = C.border}>
                     <option value="">Select semester</option>
-                    {SEMESTERS.map(s => <option key={s} value={s}>Semester {s}</option>)}
+                    {availableSemesters.map(s => <option key={s} value={s}>Semester {s}</option>)}
                   </select>
                 </div>
                 <div>
@@ -153,7 +170,7 @@ const MarkAttendance = () => {
                   <select value={section} onChange={e => setSection(e.target.value)} required style={inputStyle}
                     onFocus={e => e.target.style.borderColor = C.gold} onBlur={e => e.target.style.borderColor = C.border}>
                     <option value="">Select section</option>
-                    {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                    {availableSections.map(s => <option key={s} value={s}>Section {s}</option>)}
                   </select>
                 </div>
               </div>

@@ -1,19 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import useAuth from "../../hooks/useAuth";
+import attendanceService from "../../services/attendanceService";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const C = { navy: "#0a1628", navyMid: "#102040", gold: "#c9a84c", white: "#ffffff", light: "#f4f6fa", border: "#dde3ef", mid: "#6b7280" };
-
-// ─── Mock data (replace with real service calls) ──────────────────────────────
-const FAKE_STATS = { totalStudents: 247, totalTeachers: 18, totalSections: 6, todayPresent: 189, todayAbsent: 34, todayNotMarked: 24 };
-const FAKE_SUBS = [
-  { id: "s1", teacher: "Dr. Meera Nair", av: "MN", section: "CS-A", subject: "Data Structures", date: "2026-02-25", time: "09:15 AM", present: 38, absent: 4, total: 42 },
-  { id: "s2", teacher: "Prof. Rahul Verma", av: "RV", section: "CS-B", subject: "Operating Systems", date: "2026-02-25", time: "10:30 AM", present: 35, absent: 7, total: 42 },
-  { id: "s3", teacher: "Dr. Anita Kulkarni", av: "AK", section: "CS-C", subject: "Computer Networks", date: "2026-02-25", time: "11:45 AM", present: 40, absent: 2, total: 42 },
-  { id: "s4", teacher: "Prof. Sanjay Bose", av: "SB", section: "CS-D", subject: "DBMS", date: "2026-02-25", time: "01:00 PM", present: 29, absent: 11, total: 40 },
-  { id: "s5", teacher: "Dr. Priya Iyer", av: "PI", section: "CS-E", subject: "Machine Learning", date: "2026-02-24", time: "02:15 PM", present: 22, absent: 18, total: 40 },
-];
 
 const pct = (p, t) => t > 0 ? Math.round((p / t) * 100) : 0;
 const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
@@ -39,22 +30,41 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
   const [subs, setSubs] = useState([]);
   const [loading, setLoad] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    setTimeout(() => { setStats(FAKE_STATS); setSubs(FAKE_SUBS); setLoad(false); }, 700);
+    const fetchOverview = async () => {
+      try {
+        const res = await attendanceService.getAdminOverview();
+        const data = res.data || res;
+        setStats({
+          totalStudents: data.totalStudents || 0,
+          totalTeachers: data.totalTeachers || 0,
+          totalSections: data.totalSections || 0,
+          todayPresent: data.todayPresent || 0,
+          todayAbsent: data.todayAbsent || 0,
+        });
+        setSubs(data.submissions || []);
+      } catch (err) {
+        setError(err.response?.data?.message || err.message || "Failed to load dashboard data.");
+      } finally {
+        setLoad(false);
+      }
+    };
+    fetchOverview();
   }, []);
 
   const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
-  const totalToday = stats ? stats.todayPresent + stats.todayAbsent + stats.todayNotMarked : 1;
+  const totalToday = stats ? stats.todayPresent + stats.todayAbsent : 0;
   const presentPct = stats ? pct(stats.todayPresent, totalToday) : 0;
   const absentPct = stats ? pct(stats.todayAbsent, totalToday) : 0;
-  const nmPct = 100 - presentPct - absentPct;
 
   const QUICK = [
     { label: "Take Admission", to: "/admin/take-admission", emoji: "🎓" },
     { label: "View All Students", to: "/admin/students", emoji: "📋" },
-    { label: "Section Attendance", to: "/admin/section-attendance", emoji: "📊" },
+    { label: "View All Teachers", to: "/admin/teachers", emoji: "👨‍🏫" },
+    { label: "Manage Sections", to: "/admin/section-attendance", emoji: "🏫" },
   ];
 
 
@@ -89,12 +99,19 @@ const AdminDashboard = () => {
       {/* ── BODY ─────────────────────────────────────────────────────────── */}
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "32px 28px 48px" }}>
 
+        {/* Error */}
+        {error && (
+          <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "10px", padding: "12px 16px", marginBottom: "20px", color: "#b91c1c", fontSize: "13px" }}>
+            ⚠️ {error}
+          </div>
+        )}
+
         {/* STAT CARDS */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "18px", marginBottom: "28px" }}>
-          <StatCard icon="👥" label="Total Students" value={loading ? "…" : stats.totalStudents} color={C.navy} sub="Enrolled this semester" />
+          <StatCard icon="👥" label="Total Students" value={loading ? "…" : stats.totalStudents} color={C.navy} sub="Enrolled in system" />
           <StatCard icon="👨‍🏫" label="Total Teachers" value={loading ? "…" : stats.totalTeachers} color="#4f46e5" sub="Active faculty" />
-          <StatCard icon="🏫" label="Total Sections" value={loading ? "…" : stats.totalSections} color={C.gold} sub="Across all departments" />
-          <StatCard icon="📈" label="Today's Attendance" value={loading ? "…" : `${presentPct}%`} color={presentPct >= 75 ? "#16a34a" : presentPct >= 60 ? "#d97706" : "#dc2626"} sub={stats ? `${stats.todayPresent} present · ${stats.todayAbsent} absent` : "…"} />
+          <StatCard icon="🏫" label="Total Sections" value={loading ? "…" : stats.totalSections} color={C.gold} sub="Across all semesters" />
+          <StatCard icon="📈" label="Today's Attendance" value={loading ? "…" : totalToday > 0 ? `${presentPct}%` : "—"} color={presentPct >= 75 ? "#16a34a" : presentPct >= 60 ? "#d97706" : totalToday === 0 ? C.mid : "#dc2626"} sub={stats ? totalToday > 0 ? `${stats.todayPresent} present · ${stats.todayAbsent} absent` : "No attendance marked today" : "…"} />
         </div>
 
         {/* MIDDLE ROW */}
@@ -104,23 +121,27 @@ const AdminDashboard = () => {
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: "16px", padding: "28px", boxShadow: "0 2px 16px rgba(10,22,40,0.07)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
               <h2 style={{ fontWeight: 800, fontSize: "16px", color: C.navy, margin: 0 }}>📊 Today's Attendance Breakdown</h2>
-              <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#16a34a", display: "inline-block", boxShadow: "0 0 0 4px rgba(22,163,74,0.12)" }} />
+              {totalToday > 0 && <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#16a34a", display: "inline-block", boxShadow: "0 0 0 4px rgba(22,163,74,0.12)" }} />}
             </div>
 
-            {loading ? <div style={{ color: C.mid }}>Loading…</div> : (
+            {loading ? <div style={{ color: C.mid }}>Loading…</div> : totalToday === 0 ? (
+              <div style={{ textAlign: "center", padding: "32px 0", color: C.mid }}>
+                <div style={{ fontSize: "40px", marginBottom: "10px" }}>📭</div>
+                <p style={{ fontWeight: 600, margin: 0 }}>No attendance has been marked today yet.</p>
+                <p style={{ fontSize: "13px", marginTop: "4px" }}>Sections will appear here once teachers submit attendance.</p>
+              </div>
+            ) : (
               <>
                 {/* Segmented bar */}
                 <div style={{ height: "10px", borderRadius: "6px", background: C.light, display: "flex", overflow: "hidden", marginBottom: "20px" }}>
                   <div style={{ background: "#16a34a", width: `${presentPct}%`, transition: "width 1s ease" }} />
                   <div style={{ background: "#dc2626", width: `${absentPct}%`, transition: "width 1s ease" }} />
-                  <div style={{ background: `${C.border}`, width: `${nmPct}%`, transition: "width 1s ease" }} />
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "12px" }}>
                   {[
                     { label: "Present", count: stats.todayPresent, pct: presentPct, color: "#16a34a", bg: "#dcfce7" },
                     { label: "Absent", count: stats.todayAbsent, pct: absentPct, color: "#dc2626", bg: "#fee2e2" },
-                    { label: "Not Marked", count: stats.todayNotMarked, pct: nmPct, color: C.mid, bg: C.light },
                   ].map(item => (
                     <div key={item.label} style={{ background: item.bg, borderRadius: "10px", padding: "14px", textAlign: "center" }}>
                       <div style={{ fontSize: "24px", fontWeight: 900, color: item.color }}>{item.count}</div>
@@ -166,19 +187,26 @@ const AdminDashboard = () => {
 
           {loading ? (
             <div style={{ padding: "32px", textAlign: "center", color: C.mid }}>Loading…</div>
+          ) : subs.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px", color: C.mid }}>
+              <div style={{ fontSize: "48px", marginBottom: "12px" }}>📭</div>
+              <p style={{ fontWeight: 600 }}>No attendance submissions yet.</p>
+              <p style={{ fontSize: "13px", color: C.mid }}>Submissions will appear here once teachers mark attendance.</p>
+            </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: `2px solid ${C.light}` }}>
-                    {["Teacher", "Section", "Subject", "Date & Time", "Present/Total", "Attendance", "Status"].map(h => (
+                    {["Teacher", "Section", "Semester", "Date", "Present/Total", "Attendance", "Status"].map(h => (
                       <th key={h} style={{ textAlign: "left", padding: "11px 18px", fontSize: "11px", fontWeight: 700, color: C.mid, textTransform: "uppercase", letterSpacing: "0.8px", background: C.light }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {subs.map((row, i) => {
+                  {subs.map((row) => {
                     const p = pct(row.present, row.total);
+                    const initials = row.teacherName?.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "??";
                     return (
                       <tr key={row.id} style={{ borderBottom: `1px solid ${C.light}` }}
                         onMouseEnter={e => e.currentTarget.style.background = "#f8faff"}
@@ -186,15 +214,14 @@ const AdminDashboard = () => {
                       >
                         <td style={{ padding: "13px 18px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <div style={{ width: "34px", height: "34px", background: `linear-gradient(135deg, ${C.navy}, ${C.navyMid})`, borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", color: C.gold, fontWeight: 800, fontSize: "11px" }}>{row.av}</div>
-                            <span style={{ fontWeight: 600, fontSize: "13px", color: C.navy }}>{row.teacher}</span>
+                            <div style={{ width: "34px", height: "34px", background: `linear-gradient(135deg, ${C.navy}, ${C.navyMid})`, borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", color: C.gold, fontWeight: 800, fontSize: "11px" }}>{initials}</div>
+                            <span style={{ fontWeight: 600, fontSize: "13px", color: C.navy }}>{row.teacherName}</span>
                           </div>
                         </td>
                         <td style={{ padding: "13px 18px" }}><span style={{ background: "rgba(201,168,76,0.12)", color: C.navy, border: `1px solid rgba(201,168,76,0.3)`, padding: "3px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: 700 }}>{row.section}</span></td>
-                        <td style={{ padding: "13px 18px", fontSize: "13px", color: C.mid }}>{row.subject}</td>
+                        <td style={{ padding: "13px 18px", fontSize: "13px", color: C.mid, fontWeight: 600 }}>Sem {row.semester}</td>
                         <td style={{ padding: "13px 18px" }}>
-                          <div style={{ fontSize: "13px", color: C.navy, fontFamily: "monospace" }}>{new Date(row.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</div>
-                          <div style={{ fontSize: "11px", color: C.mid }}>{row.time}</div>
+                          <div style={{ fontSize: "13px", color: C.navy, fontFamily: "monospace" }}>{new Date(row.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</div>
                         </td>
                         <td style={{ padding: "13px 18px", fontSize: "13px", color: C.navy, fontWeight: 700 }}>{row.present}<span style={{ color: C.mid, fontWeight: 400 }}>/{row.total}</span></td>
                         <td style={{ padding: "13px 18px" }}><PctBadge p={p} /></td>
@@ -210,12 +237,6 @@ const AdminDashboard = () => {
                   })}
                 </tbody>
               </table>
-              {subs.length === 0 && (
-                <div style={{ textAlign: "center", padding: "48px", color: C.mid }}>
-                  <div style={{ fontSize: "48px", marginBottom: "12px" }}>📭</div>
-                  <p style={{ fontWeight: 600 }}>No submissions recorded yet today.</p>
-                </div>
-              )}
             </div>
           )}
         </div>

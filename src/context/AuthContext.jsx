@@ -30,21 +30,34 @@ export const AuthProvider = ({ children }) => {
 
   /*
     On startup, validate the stored token by checking its expiry.
-    If expired or malformed, clear storage so isAuthenticated stays false.
+    If valid, set a timeout to automatically log out when it expires.
   */
   useEffect(() => {
     const storedToken = localStorage.getItem(TOKEN_KEY);
+    let logoutTimer;
+    
     if (storedToken) {
       try {
-        // Decode JWT payload (base64url → JSON) without a library
         const payload = JSON.parse(atob(storedToken.split(".")[1]));
         const nowSecs = Math.floor(Date.now() / 1000);
+        
         if (!payload.exp || payload.exp < nowSecs) {
           // Token is expired — clear everything
           localStorage.removeItem(TOKEN_KEY);
           localStorage.removeItem(USER_KEY);
           setToken(null);
           setUser(null);
+        } else {
+          // Token is valid — set a timer to auto-logout exactly when it expires
+          const timeUntilExpiryMs = (payload.exp - nowSecs) * 1000;
+          logoutTimer = setTimeout(() => {
+            console.log("Session expired. Auto-logging out...");
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(USER_KEY);
+            setToken(null);
+            setUser(null);
+            window.location.href = "/login?expired=true";
+          }, timeUntilExpiryMs);
         }
       } catch {
         // Malformed token — clear it
@@ -54,7 +67,12 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
       }
     }
+    
     setInitializing(false);
+    
+    return () => {
+      if (logoutTimer) clearTimeout(logoutTimer);
+    };
   }, []);
 
   /*

@@ -32,6 +32,12 @@ const attendanceService = {
     return response.data;
   },
 
+  // Admin: dashboard overview (real stats, recent submissions)
+  getAdminOverview: async () => {
+    const response = await api.get("/attendance/admin/overview");
+    return response.data;
+  },
+
   // Student/Admin analytics (placeholders kept for future use)
   getStudentAttendance: async (studentId, params = {}) => {
     const response = await api.get(`/attendance/student/${studentId}`, {

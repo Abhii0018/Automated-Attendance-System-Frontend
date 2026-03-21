@@ -4,30 +4,24 @@ import attendanceService from "../../services/attendanceService";
 import AttendanceTable from "../../components/AttendanceTable";
 import { SECTIONS, SUBJECTS } from "../../utils/constants";
 
-const MOCK_RECORDS = [
-  { _id: "1", date: "2024-03-10", studentName: "Arjun Sharma",  subject: "Mathematics", status: "present" },
-  { _id: "2", date: "2024-03-10", studentName: "Priya Mehta",   subject: "Mathematics", status: "absent"  },
-  { _id: "3", date: "2024-03-10", studentName: "Rohan Singh",   subject: "Mathematics", status: "present" },
-  { _id: "4", date: "2024-03-10", studentName: "Ananya Rao",    subject: "Mathematics", status: "late"    },
-  { _id: "5", date: "2024-03-10", studentName: "Dev Patel",     subject: "Mathematics", status: "present" },
-];
-
 const SectionAttendance = () => {
-  const [section, setSection]   = useState("");
-  const [subject, setSubject]   = useState("");
-  const [date, setDate]         = useState(new Date().toISOString().split("T")[0]);
-  const [records, setRecords]   = useState([]);
-  const [loading, setLoading]   = useState(false);
+  const [section, setSection] = useState("");
+  const [subject, setSubject] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [summary, setSummary]   = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [error, setError] = useState("");
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!section) return;
     setLoading(true);
     setSearched(true);
+    setError("");
     try {
-      const res  = await attendanceService.getAttendanceBySection(section, date, subject);
+      const res = await attendanceService.getAttendanceBySection(section, date, subject);
       const recs = res.records || res || [];
       setRecords(recs);
       const present = recs.filter(
@@ -43,16 +37,11 @@ const SectionAttendance = () => {
           { opacity: 1, scale: 1, stagger: 0.08, duration: 0.4, ease: "back.out(1.5)" }
         );
       }, 50);
-    } catch {
-      setRecords(MOCK_RECORDS);
-      setSummary({ total: 5, present: 3, absent: 2 });
-      setTimeout(() => {
-        gsap.fromTo(
-          ".summary-card",
-          { opacity: 0, scale: 0.95 },
-          { opacity: 1, scale: 1, stagger: 0.08, duration: 0.4, ease: "back.out(1.5)" }
-        );
-      }, 50);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || "Failed to load attendance.";
+      setError(msg);
+      setRecords([]);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
@@ -147,6 +136,13 @@ const SectionAttendance = () => {
           </form>
         </div>
 
+        {/* Error message */}
+        {error && (
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 mb-6 text-rose-400 text-sm">
+            ⚠️ {error}
+          </div>
+        )}
+
         {/* Summary Cards */}
         {summary && (
           <div className="grid grid-cols-3 gap-4 mb-6">
@@ -188,21 +184,19 @@ const SectionAttendance = () => {
           <div className="bg-[#151820] border border-white/5 rounded-xl p-5 mb-6">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-slate-400">Attendance Rate</span>
-              <span className={`text-sm font-mono font-medium ${
-                (summary.present / summary.total) * 100 >= 75
-                  ? "text-emerald-400"
-                  : "text-rose-400"
-              }`}>
+              <span className={`text-sm font-mono font-medium ${(summary.present / summary.total) * 100 >= 75
+                ? "text-emerald-400"
+                : "text-rose-400"
+                }`}>
                 {Math.round((summary.present / summary.total) * 100)}%
               </span>
             </div>
             <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-700 ${
-                  (summary.present / summary.total) * 100 >= 75
-                    ? "bg-emerald-500"
-                    : "bg-rose-500"
-                }`}
+                className={`h-full rounded-full transition-all duration-700 ${(summary.present / summary.total) * 100 >= 75
+                  ? "bg-emerald-500"
+                  : "bg-rose-500"
+                  }`}
                 style={{
                   width: `${Math.round((summary.present / summary.total) * 100)}%`,
                 }}

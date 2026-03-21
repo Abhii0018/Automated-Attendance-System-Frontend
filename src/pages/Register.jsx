@@ -136,6 +136,9 @@ const Register = () => {
         {/* Form Card */}
         <div style={{ background: "#fff", borderRadius: "16px", padding: "32px", boxShadow: "0 4px 30px rgba(10,22,40,0.08)", border: `1px solid ${border}` }}>
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Honeypot to stop Chrome password breach warnings */}
+            <input type="text" style={{display: "none"}} autoComplete="username" />
+            <input type="password" style={{display: "none"}} autoComplete="new-password" />
 
             {/* Name */}
             <div>
@@ -151,7 +154,7 @@ const Register = () => {
             {/* Email */}
             <div>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: navy, marginBottom: "6px" }}>Email Address</label>
-              <input type="email" required placeholder="you@university.edu" value={form.email}
+              <input type="email" required autoComplete="off" placeholder="you@university.edu" value={form.email}
                 onChange={e => setForm({ ...form, email: e.target.value })}
                 style={inputStyle}
                 onFocus={e => e.target.style.borderColor = gold}
@@ -163,7 +166,7 @@ const Register = () => {
             <div>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: navy, marginBottom: "6px" }}>Password</label>
               <div style={{ position: "relative" }}>
-                <input type={showPw ? "text" : "password"} required placeholder="Min. 8 chars, 1 uppercase" value={form.password}
+                <input type={showPw ? "text" : "password"} required autoComplete="new-password" placeholder="Min. 8 chars, 1 uppercase" value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
                   style={{ ...inputStyle, paddingRight: "44px" }}
                   onFocus={e => e.target.style.borderColor = gold}

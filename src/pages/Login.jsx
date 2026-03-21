@@ -133,12 +133,16 @@ const Login = () => {
         {/* Form Card */}
         <div style={{ background: "#fff", borderRadius: "16px", padding: "36px", boxShadow: "0 4px 30px rgba(10,22,40,0.08)", border: `1px solid ${border}` }}>
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {/* Honeypot to stop Chrome password breach warnings */}
+            <input type="text" style={{display: "none"}} autoComplete="username" />
+            <input type="password" style={{display: "none"}} autoComplete="current-password" />
 
             {/* Email */}
             <div>
               <label style={{ display: "block", fontSize: "13px", fontWeight: 600, color: navy, marginBottom: "7px" }}>Email Address</label>
               <input
                 type="email" required
+                autoComplete="off"
                 placeholder="you@university.edu"
                 value={form.email}
                 onChange={e => setForm({ ...form, email: e.target.value })}
@@ -154,6 +158,7 @@ const Login = () => {
               <div style={{ position: "relative" }}>
                 <input
                   type={showPw ? "text" : "password"} required
+                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
