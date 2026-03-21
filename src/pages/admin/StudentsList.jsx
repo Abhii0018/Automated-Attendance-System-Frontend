@@ -25,7 +25,7 @@ const StudentsList = () => {
     const fetchStudents = async () => {
       try {
         const res = await studentService.getAllStudents();
-        setStudents(res.students || res || []);
+        setStudents(res.data || res.students || []);
       } catch {
         setStudents(MOCK_STUDENTS);
       } finally {
@@ -56,10 +56,11 @@ const StudentsList = () => {
   };
 
   const filtered = students.filter((s) => {
-    const matchSearch =
-      !search ||
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.rollNumber.toLowerCase().includes(search.toLowerCase());
+    const searchLow = search.toLowerCase();
+    const rNo = (s.rollNumber || s.registrationNumber || "").toLowerCase();
+    const sName = (s.name || "").toLowerCase();
+    
+    const matchSearch = !search || sName.includes(searchLow) || rNo.includes(searchLow);
     const matchSection = !sectionFilter || s.section === sectionFilter;
     return matchSearch && matchSection;
   });

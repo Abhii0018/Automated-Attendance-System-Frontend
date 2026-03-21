@@ -41,7 +41,7 @@ const StudentCard = ({ student, onDelete }) => {
                 {student.name}
               </h3>
               <p className="text-slate-500 text-sm font-mono">
-                {student.rollNumber}
+                {student.rollNumber || student.registrationNumber}
               </p>
             </div>
             {attendancePct !== null && (
