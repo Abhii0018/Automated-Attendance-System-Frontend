@@ -14,17 +14,16 @@ const Profile = () => {
     const fetchProfile = async () => {
       try {
         const res = await studentService.getMyProfile();
-        setProfile(res.student || res);
+        setProfile(res.data || res.student || res);
       } catch {
-        // Mock fallback
         setProfile({
-          name:                user?.name  || "Student",
-          email:               user?.email || "student@school.edu",
-          rollNumber:          "CS2024001",
-          section:             "A",
-          phone:               "+91 9876543210",
-          attendancePercentage: 72,
-          joinedAt:            new Date().toISOString(),
+          name: user?.name || "Student",
+          email: user?.email || "",
+          rollNumber: "",
+          section: "",
+          phone: "",
+          attendancePercentage: 0,
+          joinedAt: null,
         });
       } finally {
         setLoading(false);
@@ -40,13 +39,18 @@ const Profile = () => {
         { opacity: 0, y: 20 },
         { opacity: 1, y: 0, stagger: 0.1, duration: 0.6, ease: "power3.out" }
       );
+      gsap.fromTo(
+        ".profile-chip",
+        { opacity: 0, scale: 0.92 },
+        { opacity: 1, scale: 1, stagger: 0.06, delay: 0.12, duration: 0.35, ease: "power2.out" }
+      );
     }
   }, [loading]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#06070a] pt-16 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+      <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 12% 15%, #dbeafe 0%, #f4f6fa 38%, #eef2ff 100%)", paddingTop: "64px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: "34px", height: "34px", border: "3px solid #bfdbfe", borderTopColor: "#1d4ed8", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
       </div>
     );
   }
@@ -132,43 +136,39 @@ const Profile = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#06070a] pt-16">
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 12% 15%, #dbeafe 0%, #f4f6fa 38%, #eef2ff 100%)", paddingTop: "64px", fontFamily: "'Segoe UI','Inter',Arial,sans-serif" }}>
+      <div style={{ width: "min(95vw, 1120px)", margin: "0 auto", padding: "32px 22px 44px" }}>
 
         {/* Header */}
-        <div className="mb-8">
-          <p className="text-slate-500 text-xs font-mono uppercase tracking-widest mb-1">
+        <div style={{ marginBottom: "22px" }}>
+          <p style={{ color: "#1d4ed8", fontSize: "11px", fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase", margin: "0 0 6px" }}>
             Student
           </p>
-          <h1 className="font-bold text-3xl text-white">My Profile</h1>
+          <h1 style={{ fontWeight: 900, fontSize: "42px", color: "#0a1628", margin: 0 }}>My Profile</h1>
         </div>
 
-        <div ref={cardRef} className="space-y-5">
+        <div ref={cardRef} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
 
           {/* Avatar Card */}
-          <div className="profile-card opacity-0 bg-[#151820] border border-white/5 rounded-2xl p-6 flex items-center gap-5">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center flex-shrink-0">
-              <span className="font-bold text-3xl text-white">
+          <div className="profile-card profile-hover-card" style={{ opacity: 0, background: "rgba(255,255,255,0.82)", border: "1px solid rgba(255,255,255,0.65)", borderRadius: "16px", padding: "22px", display: "flex", alignItems: "center", gap: "16px", boxShadow: "0 12px 28px rgba(10,22,40,0.1)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
+            <div style={{ width: "76px", height: "76px", borderRadius: "16px", background: "linear-gradient(135deg, #0a1628, #102040)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ fontWeight: 800, fontSize: "30px", color: "#c9a84c" }}>
                 {info.name?.charAt(0)?.toUpperCase() || "?"}
               </span>
             </div>
             <div>
-              <h2 className="font-bold text-2xl text-white">{info.name}</h2>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-400/20">
+              <h2 style={{ fontWeight: 800, fontSize: "28px", color: "#0a1628", margin: 0 }}>{info.name}</h2>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
+                <span className="profile-chip" style={{ fontSize: "11px", padding: "4px 10px", borderRadius: "999px", background: "#e0e7ff", color: "#1e40af", border: "1px solid #c7d2fe", fontWeight: 600 }}>
                   Student
                 </span>
                 {info.section && (
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                  <span className="profile-chip" style={{ fontSize: "11px", padding: "4px 10px", borderRadius: "999px", background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0", fontWeight: 600 }}>
                     Section {info.section}
                   </span>
                 )}
                 {pct !== undefined && (
-                  <span className={`text-xs px-2.5 py-1 rounded-full border font-mono ${
-                    isLow
-                      ? "bg-rose-400/10 text-rose-400 border-rose-400/20"
-                      : "bg-emerald-400/10 text-emerald-400 border-emerald-400/20"
-                  }`}>
+                  <span className="profile-chip" style={{ fontSize: "11px", padding: "4px 10px", borderRadius: "999px", border: `1px solid ${isLow ? "#fecaca" : "#bbf7d0"}`, background: isLow ? "#fef2f2" : "#ecfdf5", color: isLow ? "#b91c1c" : "#166534", fontWeight: 700, fontFamily: "monospace" }}>
                     {pct}% Attendance
                   </span>
                 )}
@@ -177,30 +177,25 @@ const Profile = () => {
           </div>
 
           {/* Attendance Card */}
-          <div className="profile-card opacity-0 bg-[#151820] border border-white/5 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-semibold text-white">Attendance</span>
-              <span className={`font-mono text-lg font-bold ${
-                isLow ? "text-rose-400" : "text-emerald-400"
-              }`}>
+          <div className="profile-card profile-hover-card" style={{ opacity: 0, background: "rgba(255,255,255,0.82)", border: "1px solid rgba(255,255,255,0.65)", borderRadius: "16px", padding: "22px", boxShadow: "0 12px 28px rgba(10,22,40,0.1)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontWeight: 700, color: "#0a1628" }}>Attendance</span>
+              <span style={{ fontFamily: "monospace", fontSize: "22px", fontWeight: 800, color: isLow ? "#dc2626" : "#16a34a" }}>
                 {pct}%
               </span>
             </div>
 
             {/* Bar */}
-            <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+            <div style={{ height: "11px", background: "#e2e8f0", borderRadius: "999px", overflow: "hidden" }}>
               <div
-                className={`h-full rounded-full transition-all duration-1000 ${
-                  isLow ? "bg-rose-500" : "bg-emerald-500"
-                }`}
-                style={{ width: `${pct}%` }}
+                style={{ height: "100%", borderRadius: "999px", transition: "width 1s ease", background: isLow ? "#ef4444" : "#22c55e", width: `${pct}%` }}
               />
             </div>
 
             {/* Labels */}
-            <div className="flex items-center justify-between mt-2 text-xs font-mono text-slate-600">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "8px", fontSize: "11px", fontFamily: "monospace", color: "#64748b" }}>
               <span>0%</span>
-              <span className="text-slate-500">
+              <span style={{ color: "#475569" }}>
                 Required: {ATTENDANCE_THRESHOLD}%
               </span>
               <span>100%</span>
@@ -208,40 +203,35 @@ const Profile = () => {
 
             {/* Warning */}
             {isLow && (
-              <div className="mt-4 px-4 py-3 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-start gap-2">
-                <svg className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div style={{ marginTop: "12px", padding: "10px 12px", borderRadius: "10px", background: "#fef2f2", border: "1px solid #fecaca", display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                <svg style={{ width: "16px", height: "16px", color: "#dc2626", flexShrink: 0, marginTop: "2px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <p className="text-rose-400/80 text-xs">
-                  Your attendance is below the 75% threshold. Please attend
-                  more classes to avoid being barred from exams.
+                <p style={{ color: "#b91c1c", fontSize: "12px", margin: 0 }}>
+                  Your attendance is below {ATTENDANCE_THRESHOLD}%. Attend more classes to avoid exam restrictions.
                 </p>
               </div>
             )}
           </div>
 
           {/* Info Fields */}
-          <div className="profile-card opacity-0 bg-[#151820] border border-white/5 rounded-2xl p-6">
-            <h3 className="font-semibold text-white mb-4">
+          <div className="profile-card profile-hover-card" style={{ opacity: 0, background: "rgba(255,255,255,0.82)", border: "1px solid rgba(255,255,255,0.65)", borderRadius: "16px", padding: "22px", boxShadow: "0 12px 28px rgba(10,22,40,0.1)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
+            <h3 style={{ fontWeight: 700, color: "#0a1628", margin: "0 0 12px" }}>
               Personal Information
             </h3>
-            <div className="divide-y divide-white/5">
+            <div style={{ borderTop: "1px solid #e2e8f0" }}>
               {fields.map((f, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between py-4 first:pt-0 last:pb-0"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: i === fields.length - 1 ? "none" : "1px solid #e2e8f0" }}
                 >
-                  <div className="flex items-center gap-3 text-slate-500">
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#64748b" }}>
                     {f.icon}
-                    <span className="text-sm">{f.label}</span>
+                    <span style={{ fontSize: "14px" }}>{f.label}</span>
                   </div>
-                  <span className={`text-sm ${
-                    f.mono
-                      ? "font-mono text-blue-400"
-                      : "text-slate-200"
-                  }`}>
+                  <span style={{ fontSize: "14px", color: f.mono ? "#1e40af" : "#0f172a", fontFamily: f.mono ? "monospace" : "inherit", fontWeight: f.mono ? 700 : 500 }}>
                     {f.value || "—"}
                   </span>
                 </div>
@@ -251,6 +241,11 @@ const Profile = () => {
 
         </div>
       </div>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .profile-hover-card { transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
+        .profile-hover-card:hover { transform: translateY(-4px); box-shadow: 0 20px 36px rgba(10,22,40,.16); border-color: #93c5fd; }
+      `}</style>
     </div>
   );
 };

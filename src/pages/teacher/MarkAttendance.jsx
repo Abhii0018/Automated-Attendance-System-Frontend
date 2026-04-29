@@ -5,13 +5,18 @@ import { SECTIONS, SEMESTERS } from "../../utils/constants";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const C = { navy: "#0a1628", navyMid: "#102040", gold: "#c9a84c", goldL: "#e8c96a", white: "#ffffff", light: "#f4f6fa", border: "#dde3ef", mid: "#6b7280" };
+const PAGE_W = "min(96vw, 1240px)";
 
 const MarkAttendance = () => {
   const [step, setStep] = useState(1);
   const [semester, setSemester] = useState("");
   const [section, setSection] = useState("");
+  const [subject, setSubject] = useState("");
+  const [periodNumber, setPeriodNumber] = useState("");
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
+  const [scheduleSlots, setScheduleSlots] = useState([]);
+  const [selectedSlot, setSelectedSlot] = useState("");
   const [allowedSections, setAllowedSections] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -28,6 +33,8 @@ const MarkAttendance = () => {
         const res = await attendanceService.getTeacherOverview();
         const data = res.data || res;
         setAllowedSections(data.sections || []);
+        const scheduleRes = await attendanceService.getTodayTeacherSchedule();
+        setScheduleSlots(scheduleRes.data || []);
       } catch (err) {
         console.error("Failed to load assigned sections", err);
       }
@@ -36,15 +43,18 @@ const MarkAttendance = () => {
   }, []);
 
   const availableSemesters = [...new Set(allowedSections.map(s => s.semester))];
-  const availableSections = allowedSections.filter(s => s.semester === Number(semester)).map(s => s.section);
+  const availableSections = [...new Set(allowedSections.filter(s => s.semester === Number(semester)).map(s => s.section))];
+  const availableSubjects = allowedSections
+    .filter((s) => s.semester === Number(semester) && s.section === section)
+    .map((s) => s.subject);
 
   const handleLoadStudents = async (e) => {
     e.preventDefault();
     setError(""); setAlreadySubmitted(false);
-    if (!semester || !section) return;
+    if (!semester || !section || !subject || !periodNumber) return;
     setLoadingStudents(true);
     try {
-      const res = await attendanceService.getSectionStudents(semester, section);
+      const res = await attendanceService.getSectionStudents(semester, section, subject);
       const data = res.data || [];
       setStudents(data);
       const init = {};
@@ -66,11 +76,21 @@ const MarkAttendance = () => {
 
   const toggle = (id) => setAttendance(prev => ({ ...prev, [id]: prev[id] === "present" ? "absent" : "present" }));
 
+  const onSlotChange = (value) => {
+    setSelectedSlot(value);
+    const slot = scheduleSlots.find((s) => s._id === value);
+    if (!slot) return;
+    setSemester(String(slot.semester));
+    setSection(slot.section);
+    setSubject(slot.subject);
+    setPeriodNumber(String(slot.periodNumber));
+  };
+
   const handleSubmit = async () => {
     setSubmitting(true); setError(""); setAlreadySubmitted(false);
     try {
       const attendanceList = students.map(s => ({ studentId: s.studentId, status: attendance[s.studentId] === "present" ? "Present" : "Absent" }));
-      await attendanceService.markAttendance({ semester: Number(semester), section, attendanceList });
+      await attendanceService.markAttendance({ semester: Number(semester), section, subject, periodNumber: Number(periodNumber), attendanceList });
       setSuccess(true);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || "";
@@ -81,7 +101,7 @@ const MarkAttendance = () => {
     }
   };
 
-  const handleReset = () => { setSuccess(false); setStep(1); setStudents([]); setAttendance({}); setSemester(""); setSection(""); setAlreadySubmitted(false); setError(""); };
+  const handleReset = () => { setSuccess(false); setStep(1); setStudents([]); setAttendance({}); setSemester(""); setSection(""); setSubject(""); setPeriodNumber(""); setAlreadySubmitted(false); setError(""); };
 
   const presentCount = Object.values(attendance).filter(v => v === "present").length;
   const absentCount = Object.values(attendance).filter(v => v === "absent").length;
@@ -90,11 +110,11 @@ const MarkAttendance = () => {
 
   // ── Success screen
   if (success) return (
-    <div style={{ minHeight: "100vh", background: C.light, fontFamily: "'Segoe UI','Inter',Arial,sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 8% 10%, #c7d2fe 0%, #eaf1ff 30%, #e9eefc 64%, #eef2ff 100%)", fontFamily: "'Segoe UI','Inter',Arial,sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: "20px", padding: "52px 44px", textAlign: "center", maxWidth: "420px", width: "100%", boxShadow: "0 8px 40px rgba(10,22,40,0.12)" }}>
-        <div style={{ width: "72px", height: "72px", background: "#dcfce7", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", fontSize: "32px" }}>✅</div>
+        <div style={{ width: "72px", height: "72px", background: "#dcfce7", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }} />
         <h2 style={{ fontSize: "26px", fontWeight: 900, color: C.navy, margin: "0 0 8px" }}>Attendance Submitted!</h2>
-        <p style={{ color: C.mid, fontSize: "14px", margin: "0 0 4px" }}>Semester {semester} · Section {section}</p>
+        <p style={{ color: C.mid, fontSize: "14px", margin: "0 0 4px" }}>Semester {semester} · Section {section} · {subject} · Period {periodNumber}</p>
         <p style={{ color: C.mid, fontSize: "13px", fontFamily: "monospace", marginBottom: "28px" }}>{todayStr}</p>
 
         <div style={{ display: "flex", justifyContent: "center", gap: "32px", marginBottom: "32px" }}>
@@ -121,15 +141,15 @@ const MarkAttendance = () => {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: C.light, fontFamily: "'Segoe UI','Inter',Arial,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 8% 10%, #c7d2fe 0%, #eaf1ff 30%, #e9eefc 64%, #eef2ff 100%)", fontFamily: "'Segoe UI','Inter',Arial,sans-serif" }}>
 
       {/* ── NAVY HEADER ─────────────────────────────────────────────────── */}
-      <div style={{ background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navyMid} 100%)`, paddingTop: "80px", paddingBottom: "40px", position: "relative" }}>
+      <div style={{ background: `linear-gradient(120deg, ${C.navy} 0%, ${C.navyMid} 55%, #173465 100%)`, paddingTop: "88px", paddingBottom: "44px", position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(to right, ${C.gold}, ${C.goldL}, ${C.gold})` }} />
-        <div style={{ maxWidth: "860px", margin: "0 auto", padding: "0 28px" }}>
-          <div style={{ color: C.gold, fontSize: "11px", fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase", marginBottom: "10px" }}>📋 Mark Attendance</div>
+        <div style={{ width: PAGE_W, margin: "0 auto", padding: "0 24px" }}>
+          <div style={{ color: C.gold, fontSize: "11px", fontWeight: 700, letterSpacing: "2px", textTransform: "uppercase", marginBottom: "10px" }}>Teacher Workspace</div>
           <h1 style={{ color: C.white, fontSize: "clamp(24px,4vw,34px)", fontWeight: 900, margin: "0 0 8px" }}>
-            {step === 1 ? "Select Session" : `Semester ${semester} · Section ${section}`}
+            {step === 1 ? "Select Session" : `Semester ${semester} · Section ${section} · ${subject} · P${periodNumber}`}
           </h1>
           <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px", margin: 0 }}>{todayFmt}</p>
 
@@ -147,7 +167,7 @@ const MarkAttendance = () => {
       </div>
 
       {/* ── BODY ─────────────────────────────────────────────────────────── */}
-      <div style={{ maxWidth: "860px", margin: "0 auto", padding: "32px 28px 48px" }}>
+      <div style={{ width: PAGE_W, margin: "0 auto", padding: "36px 24px 52px" }}>
 
         {/* STEP 1 — session config */}
         {step === 1 && (
@@ -156,7 +176,19 @@ const MarkAttendance = () => {
             <p style={{ color: C.mid, fontSize: "14px", margin: "0 0 28px" }}>Select the semester and section to fetch the student list.</p>
 
             <form onSubmit={handleLoadStudents}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "24px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "20px", marginBottom: "24px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: C.navy, marginBottom: "7px" }}>Today's Slot</label>
+                  <select value={selectedSlot} onChange={e => onSlotChange(e.target.value)} style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = C.gold} onBlur={e => e.target.style.borderColor = C.border}>
+                    <option value="">Select scheduled slot</option>
+                    {scheduleSlots.map((slot) => (
+                      <option key={slot._id} value={slot._id}>
+                        Sem {slot.semester} | {slot.section} | {slot.subject} | P{slot.periodNumber}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: C.navy, marginBottom: "7px" }}>Semester <span style={{ color: "#dc2626" }}>*</span></label>
                   <select value={semester} onChange={e => setSemester(e.target.value)} required style={inputStyle}
@@ -173,15 +205,31 @@ const MarkAttendance = () => {
                     {availableSections.map(s => <option key={s} value={s}>Section {s}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: C.navy, marginBottom: "7px" }}>Subject <span style={{ color: "#dc2626" }}>*</span></label>
+                  <select value={subject} onChange={e => setSubject(e.target.value)} required style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = C.gold} onBlur={e => e.target.style.borderColor = C.border}>
+                    <option value="">Select subject</option>
+                    {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "13px", fontWeight: 700, color: C.navy, marginBottom: "7px" }}>Period <span style={{ color: "#dc2626" }}>*</span></label>
+                  <select value={periodNumber} onChange={e => setPeriodNumber(e.target.value)} required style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = C.gold} onBlur={e => e.target.style.borderColor = C.border}>
+                    <option value="">Select period</option>
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(p => <option key={p} value={p}>Period {p}</option>)}
+                  </select>
+                </div>
               </div>
 
               {error && (
                 <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "10px", padding: "12px 16px", marginBottom: "20px", color: "#b91c1c", fontSize: "13px", display: "flex", gap: "8px", alignItems: "center" }}>
-                  ⚠️ {error}
+                  {error}
                 </div>
               )}
 
-              <button type="submit" disabled={loadingStudents || !semester || !section} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "14px 32px", background: `linear-gradient(135deg, ${C.navy}, ${C.navyMid})`, color: C.gold, border: "none", borderRadius: "10px", fontWeight: 800, fontSize: "15px", cursor: loadingStudents ? "not-allowed" : "pointer", opacity: (!semester || !section) ? 0.6 : 1, transition: "all 0.2s" }}>
+              <button type="submit" disabled={loadingStudents || !semester || !section || !subject || !periodNumber} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "14px 32px", background: `linear-gradient(135deg, ${C.navy}, ${C.navyMid})`, color: C.gold, border: "none", borderRadius: "10px", fontWeight: 800, fontSize: "15px", cursor: loadingStudents ? "not-allowed" : "pointer", opacity: (!semester || !section || !subject || !periodNumber) ? 0.6 : 1, transition: "all 0.2s" }}>
                 {loadingStudents ? (<><span style={{ width: "16px", height: "16px", border: "2px solid rgba(201,168,76,0.3)", borderTop: `2px solid ${C.gold}`, borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Loading Students…</>) : "Load Students →"}
               </button>
             </form>
@@ -194,7 +242,7 @@ const MarkAttendance = () => {
             {/* Session info bar */}
             <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: "12px", padding: "14px 20px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 8px rgba(10,22,40,0.05)" }}>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                {[`Semester ${semester}`, `Section ${section}`, todayStr].map(t => (
+                {[`Semester ${semester}`, `Section ${section}`, subject, `Period ${periodNumber}`, todayStr].map(t => (
                   <span key={t} style={{ background: C.light, border: `1px solid ${C.border}`, color: C.navy, padding: "4px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: 700, fontFamily: "monospace" }}>{t}</span>
                 ))}
               </div>
@@ -204,8 +252,8 @@ const MarkAttendance = () => {
             {/* Bulk actions */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
               <span style={{ fontSize: "13px", color: C.mid, fontWeight: 600 }}>Mark all:</span>
-              <button onClick={() => markAll("present")} style={{ padding: "7px 16px", borderRadius: "8px", border: "1.5px solid #16a34a", background: "#dcfce7", color: "#166534", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>✅ Present</button>
-              <button onClick={() => markAll("absent")} style={{ padding: "7px 16px", borderRadius: "8px", border: "1.5px solid #dc2626", background: "#fee2e2", color: "#991b1b", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>❌ Absent</button>
+              <button onClick={() => markAll("present")} style={{ padding: "7px 16px", borderRadius: "8px", border: "1.5px solid #16a34a", background: "#dcfce7", color: "#166534", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>Present</button>
+              <button onClick={() => markAll("absent")} style={{ padding: "7px 16px", borderRadius: "8px", border: "1.5px solid #dc2626", background: "#fee2e2", color: "#991b1b", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>Absent</button>
             </div>
 
             {/* Student table */}
@@ -242,7 +290,7 @@ const MarkAttendance = () => {
                           background: isPresent ? "#dcfce7" : "#fee2e2",
                           color: isPresent ? "#166534" : "#991b1b",
                         }}>
-                          {isPresent ? "✅ Present" : "❌ Absent"}
+                          {isPresent ? "Present" : "Absent"}
                         </button>
                       </div>
                     </div>
@@ -268,13 +316,13 @@ const MarkAttendance = () => {
                 </div>
               </div>
               <button onClick={handleSubmit} disabled={submitting || alreadySubmitted} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "13px 28px", background: alreadySubmitted ? C.light : `linear-gradient(135deg, ${C.navy}, ${C.navyMid})`, color: alreadySubmitted ? C.mid : C.gold, border: "none", borderRadius: "10px", fontWeight: 800, fontSize: "14px", cursor: (submitting || alreadySubmitted) ? "not-allowed" : "pointer", opacity: alreadySubmitted ? 0.7 : 1, transition: "all 0.2s" }}>
-                {submitting ? (<><span style={{ width: "16px", height: "16px", border: `2px solid rgba(201,168,76,0.3)`, borderTop: `2px solid ${C.gold}`, borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Saving…</>) : alreadySubmitted ? "Already Submitted Today" : "Submit Attendance ✓"}
+                {submitting ? (<><span style={{ width: "16px", height: "16px", border: `2px solid rgba(201,168,76,0.3)`, borderTop: `2px solid ${C.gold}`, borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Saving…</>) : alreadySubmitted ? "Already Submitted Today" : "Submit Attendance"}
               </button>
             </div>
 
             {error && (
               <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "10px", padding: "12px 16px", marginTop: "12px", color: "#b91c1c", fontSize: "13px", display: "flex", gap: "8px" }}>
-                ⚠️ {error}
+                {error}
               </div>
             )}
           </>

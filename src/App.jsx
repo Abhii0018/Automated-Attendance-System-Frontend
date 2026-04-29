@@ -8,6 +8,7 @@ import Navbar from "./components/Navbar";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import VerifyEmail from "./pages/VerifyEmail";
 
 // Admin
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -17,6 +18,7 @@ import StudentAnalytics from "./pages/admin/StudentAnalytics";
 import SectionAttendance from "./pages/admin/SectionAttendance";
 import TakeAdmission from "./pages/admin/TakeAdmission";
 import TeachersList from "./pages/admin/TeachersList";
+import TeacherApplications from "./pages/admin/TeacherApplications";
 
 
 // Teacher
@@ -39,6 +41,7 @@ const App = () => {
           <Route path="/landing" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
 
           {/* ── Admin ── */}
           <Route
@@ -77,6 +80,16 @@ const App = () => {
               <ProtectedRoute>
                 <RoleRoute allowedRoles={["admin"]}>
                   <TeachersList />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/teacher-applications"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <TeacherApplications />
                 </RoleRoute>
               </ProtectedRoute>
             }

@@ -45,6 +45,11 @@ const studentService = {
     });
     return response.data;
   },
+
+  linkStudentUser: async (studentId, email) => {
+    const response = await api.post(`/students/${studentId}/link-user`, { email });
+    return response.data;
+  },
 };
 
 export default studentService;

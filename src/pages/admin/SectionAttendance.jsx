@@ -48,30 +48,30 @@ const SectionAttendance = () => {
   };
 
   const inputClass =
-    "w-full bg-[#0d0f14] border border-slate-700 focus:border-blue-500 text-slate-100 placeholder-slate-600 rounded-lg px-4 py-3 outline-none transition-all duration-200 text-sm appearance-none";
+    "w-full bg-white/90 border border-slate-200 focus:border-blue-400 text-slate-800 placeholder-slate-500 rounded-lg px-4 py-3 outline-none transition-all duration-200 text-sm appearance-none shadow-[0_6px_14px_rgba(10,22,40,0.06)]";
 
   return (
-    <div className="min-h-screen bg-[#06070a] pt-16">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_8%_10%,#c7d2fe_0%,#eaf1ff_30%,#e9eefc_64%,#eef2ff_100%)] pt-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
 
         {/* Header */}
         <div className="mb-8">
-          <p className="text-slate-500 text-xs font-mono uppercase tracking-widest mb-2">
+          <p className="text-blue-700 text-xs font-mono uppercase tracking-widest mb-2">
             Admin
           </p>
-          <h1 className="font-bold text-3xl text-white">Section Attendance</h1>
-          <p className="text-slate-500 mt-1 text-sm">
+          <h1 className="font-bold text-3xl text-slate-900">Section Attendance</h1>
+          <p className="text-slate-600 mt-1 text-sm">
             View attendance records for any section.
           </p>
         </div>
 
         {/* Filter Card */}
-        <div className="bg-[#151820] border border-white/5 rounded-2xl p-6 mb-6">
-          <h2 className="font-semibold text-white mb-5">Filter Records</h2>
+        <div className="bg-white/80 border border-white/60 rounded-2xl p-6 mb-6 backdrop-blur-md shadow-[0_12px_24px_rgba(10,22,40,0.08)]">
+          <h2 className="font-semibold text-slate-900 mb-5">Filter Records</h2>
           <form onSubmit={handleSearch}>
             <div className="grid sm:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm text-slate-400 mb-2">
+                <label className="block text-sm text-slate-600 mb-2">
                   Section <span className="text-rose-400">*</span>
                 </label>
                 <select
@@ -90,7 +90,7 @@ const SectionAttendance = () => {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-400 mb-2">
+                <label className="block text-sm text-slate-600 mb-2">
                   Subject
                 </label>
                 <select
@@ -108,7 +108,7 @@ const SectionAttendance = () => {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-400 mb-2">
+                <label className="block text-sm text-slate-600 mb-2">
                   Date
                 </label>
                 <input
@@ -138,8 +138,8 @@ const SectionAttendance = () => {
 
         {/* Error message */}
         {error && (
-          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 mb-6 text-rose-400 text-sm">
-            ⚠️ {error}
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 mb-6 text-rose-600 text-sm">
+            {error}
           </div>
         )}
 
@@ -151,7 +151,7 @@ const SectionAttendance = () => {
                 label: "Total",
                 value: summary.total,
                 color: "text-white",
-                bg: "bg-slate-800/50",
+                bg: "bg-slate-100",
               },
               {
                 label: "Present",
@@ -168,12 +168,12 @@ const SectionAttendance = () => {
             ].map((s, i) => (
               <div
                 key={i}
-                className={`summary-card opacity-0 ${s.bg} border border-white/5 rounded-xl p-5 text-center`}
+                className={`summary-card opacity-0 ${s.bg} border border-slate-200 rounded-xl p-5 text-center`}
               >
                 <div className={`font-bold text-3xl mb-1 ${s.color}`}>
                   {s.value}
                 </div>
-                <div className="text-slate-500 text-sm">{s.label}</div>
+                <div className="text-slate-600 text-sm">{s.label}</div>
               </div>
             ))}
           </div>
@@ -181,9 +181,9 @@ const SectionAttendance = () => {
 
         {/* Attendance rate bar */}
         {summary && summary.total > 0 && (
-          <div className="bg-[#151820] border border-white/5 rounded-xl p-5 mb-6">
+          <div className="bg-white/80 border border-white/60 rounded-xl p-5 mb-6 backdrop-blur-md shadow-[0_10px_22px_rgba(10,22,40,0.08)]">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-400">Attendance Rate</span>
+              <span className="text-sm text-slate-600">Attendance Rate</span>
               <span className={`text-sm font-mono font-medium ${(summary.present / summary.total) * 100 >= 75
                 ? "text-emerald-400"
                 : "text-rose-400"
@@ -191,7 +191,7 @@ const SectionAttendance = () => {
                 {Math.round((summary.present / summary.total) * 100)}%
               </span>
             </div>
-            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-700 ${(summary.present / summary.total) * 100 >= 75
                   ? "bg-emerald-500"
@@ -216,15 +216,15 @@ const SectionAttendance = () => {
 
         {/* Empty state before search */}
         {!searched && (
-          <div className="bg-[#151820] border border-white/5 rounded-2xl flex flex-col items-center py-16 text-center">
-            <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mb-4">
-              <svg className="w-7 h-7 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="bg-white/80 border border-white/60 rounded-2xl flex flex-col items-center py-16 text-center backdrop-blur-md shadow-[0_12px_24px_rgba(10,22,40,0.08)]">
+            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+              <svg className="w-7 h-7 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                 />
               </svg>
             </div>
-            <p className="text-slate-400 text-sm">
+            <p className="text-slate-600 text-sm">
               Select a section and click Search to view records.
             </p>
           </div>

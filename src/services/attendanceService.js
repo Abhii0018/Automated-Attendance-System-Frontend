@@ -11,17 +11,17 @@ const attendanceService = {
   },
 
   // Admin: get aggregated attendance for a section
-  getAttendanceBySection: async (section, date, subject) => {
+  getAttendanceBySection: async (section, date, subject, semester) => {
     const response = await api.get("/attendance/section", {
-      params: { section, date, subject },
+      params: { section, date, subject, semester },
     });
     return response.data;
   },
 
   // Teacher/Admin: get students for a semester + section
-  getSectionStudents: async (semester, section) => {
+  getSectionStudents: async (semester, section, subject) => {
     const response = await api.get("/attendance/section/students", {
-      params: { semester, section },
+      params: { semester, section, subject },
     });
     return response.data;
   },
@@ -29,6 +29,31 @@ const attendanceService = {
   // Teacher: dashboard overview (sections, stats, history)
   getTeacherOverview: async () => {
     const response = await api.get("/attendance/teacher/overview");
+    return response.data;
+  },
+
+  getTeacherPunchToday: async () => {
+    const response = await api.get("/attendance/teacher/punch/today");
+    return response.data;
+  },
+
+  teacherCheckIn: async () => {
+    const response = await api.post("/attendance/teacher/punch/check-in");
+    return response.data;
+  },
+
+  teacherCheckOut: async () => {
+    const response = await api.post("/attendance/teacher/punch/check-out");
+    return response.data;
+  },
+
+  getTodayTeacherSchedule: async () => {
+    const response = await api.get("/attendance/teacher/schedule/today");
+    return response.data;
+  },
+
+  upsertTimetableSlot: async (payload) => {
+    const response = await api.post("/attendance/admin/timetable-slot", payload);
     return response.data;
   },
 

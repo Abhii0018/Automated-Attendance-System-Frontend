@@ -15,19 +15,17 @@ export const ROLE_REDIRECTS = {
 
 export const ATTENDANCE_THRESHOLD = 75;
 
-export const SECTIONS = ["PA", "PB", "PC", "PD", "PE"];
+export const SECTIONS = ["PA", "PB"];
 
 
-export const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8];
+export const SEMESTERS = [1];
 
 export const SUBJECTS = [
-  "Mathematics",
-  "Physics",
-  "Chemistry",
-  "Computer Science",
+  "Math",
+  "C Language",
+  "DBMS",
   "English",
-  "Biology",
-  "History",
+  "Networking",
 ];
 
 export const TOKEN_KEY = "attendx_token";

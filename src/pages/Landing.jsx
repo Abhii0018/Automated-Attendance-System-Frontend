@@ -73,25 +73,25 @@ const STATS = [
 ];
 
 const FEATURES = [
-  { icon: "📊", title: "Real-Time Tracking", desc: "Live dashboards with instant updates across every class and section." },
-  { icon: "🎓", title: "Role-Based Access", desc: "Admin, Teacher, and Student portals with tailored tools and permissions." },
-  { icon: "🔔", title: "Smart Alerts", desc: "Automatic low-attendance warnings before students cross the 75% threshold." },
-  { icon: "📋", title: "Detailed Reports", desc: "Subject-wise, section-wise and date-range reports at a single click." },
-  { icon: "🔒", title: "Secure & Reliable", desc: "JWT auth, encrypted data, and 99.9% uptime — nothing is ever lost." },
-  { icon: "⚡", title: "Lightning Fast", desc: "Sub-75ms API responses for instant attendance marking, any class size." },
+  { icon: "RT", title: "Real-Time Tracking", desc: "Live dashboards with instant updates across every class and section." },
+  { icon: "RB", title: "Role-Based Access", desc: "Admin, Teacher, and Student portals with tailored tools and permissions." },
+  { icon: "AL", title: "Smart Alerts", desc: "Automatic low-attendance warnings before students cross the 75% threshold." },
+  { icon: "RP", title: "Detailed Reports", desc: "Subject-wise, section-wise and date-range reports at a single click." },
+  { icon: "SC", title: "Secure & Reliable", desc: "JWT auth, encrypted data, and 99.9% uptime — nothing is ever lost." },
+  { icon: "SP", title: "Lightning Fast", desc: "Sub-75ms API responses for instant attendance marking, any class size." },
 ];
 
 const ROLES = [
   {
-    role: "Administrator", icon: "🏛️",
+    role: "Administrator", icon: "AD",
     perks: ["Manage all student accounts", "Institution-wide analytics", "Monitor low-attendance students", "Section & subject reports"],
   },
   {
-    role: "Teacher", icon: "👨‍🏫",
+    role: "Teacher", icon: "TC",
     perks: ["Mark attendance by section & subject", "Track present / absent / late", "View class-level summaries", "Filter by date range"],
   },
   {
-    role: "Student", icon: "👩‍🎓",
+    role: "Student", icon: "ST",
     perks: ["Check personal attendance %", "Subject-wise breakdowns", "Receive low-attendance warnings", "Manage personal profile"],
   },
 ];
@@ -153,7 +153,7 @@ const Landing = () => {
 
           {/* Logo */}
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px" }}>🎓</div>
+            <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", fontWeight: 900, color: C.navy }}>AX</div>
             <div>
               <div style={{ color: C.white, fontWeight: 900, fontSize: "18px", letterSpacing: "0.5px" }}>AttendX</div>
               <div style={{ color: C.gold, fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase" }}>ATTENDANCE OS</div>
@@ -223,7 +223,7 @@ const Landing = () => {
           <div style={{ position: "absolute", bottom: "-60px", right: "-60px", width: "300px", height: "300px", borderRadius: "50%", background: "rgba(201,168,76,0.07)", pointerEvents: "none" }} />
 
           <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(201,168,76,0.15)", border: `1px solid rgba(201,168,76,0.35)`, borderRadius: "30px", padding: "7px 18px", marginBottom: "28px", width: "fit-content" }}>
-            <span style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase" }}>⚡ Smart Campus Operations</span>
+            <span style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase" }}>Smart Campus Operations</span>
           </div>
 
           <h1 style={{ color: C.white, fontSize: "clamp(32px, 4vw, 58px)", fontWeight: 900, lineHeight: 1.1, margin: "0 0 12px", letterSpacing: "-1px" }}>
@@ -283,9 +283,9 @@ const Landing = () => {
       <div style={{ background: C.gold, padding: "10px 28px", display: "flex", alignItems: "center", gap: "14px" }}>
         <span style={{ background: C.navy, color: C.gold, padding: "3px 12px", borderRadius: "4px", fontSize: "11px", fontWeight: 800, letterSpacing: "1.5px", whiteSpace: "nowrap" }}>NEW</span>
         <marquee style={{ color: C.navy, fontSize: "13px", fontWeight: 600 }}>
-          &nbsp;&nbsp;🚀 AttendX v2.0 is live! Explore the drastically redesigned UI templates.&nbsp;&nbsp;|&nbsp;&nbsp;
-          📩 Automated low-attendance SMS functionality is now fully integrated.&nbsp;&nbsp;|&nbsp;&nbsp;
-          🔒 World-class JWT Auth ensures your academic data is safer than ever.
+          &nbsp;&nbsp;AttendX v2.0 is live with upgraded dashboard experiences.&nbsp;&nbsp;|&nbsp;&nbsp;
+          Automated low-attendance notifications are fully integrated.&nbsp;&nbsp;|&nbsp;&nbsp;
+          JWT-based security keeps academic records protected.
         </marquee>
       </div>
 
@@ -308,7 +308,7 @@ const Landing = () => {
             <div style={{ position: "relative" }}>
               <img src={campusImg} alt="Campus" style={{ width: "100%", height: "400px", objectFit: "cover", borderRadius: "12px", display: "block", boxShadow: "0 24px 64px rgba(10,22,40,0.18)" }} />
               <div className="land-about-badge" style={{ position: "absolute", bottom: "-28px", right: "-28px", background: C.white, borderRadius: "14px", padding: "20px 24px", boxShadow: "0 10px 40px rgba(0,0,0,0.14)", display: "flex", alignItems: "center", gap: "14px", border: `1px solid ${C.border}` }}>
-                <span style={{ fontSize: "32px" }}>🏆</span>
+                <span style={{ fontSize: "14px", fontWeight: 900, color: C.navy, background: "#eef2fb", borderRadius: "8px", padding: "6px 10px" }}>EST</span>
                 <div>
                   <div style={{ fontWeight: 800, color: C.navy, fontSize: "18px" }}>Est. 1998</div>
                   <div style={{ color: C.mid, fontSize: "12px" }}>Excellence in Education</div>
@@ -345,7 +345,7 @@ const Landing = () => {
                 onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(10,22,40,0.14)"; e.currentTarget.style.borderColor = C.gold; }}
                 onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(10,22,40,0.06)"; e.currentTarget.style.borderColor = C.border; }}
               >
-                <div style={{ fontSize: "40px", marginBottom: "18px" }}>{f.icon}</div>
+                <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: "42px", height: "28px", padding: "0 10px", borderRadius: "8px", background: "#eef2fb", color: C.navy, fontSize: "12px", fontWeight: 900, letterSpacing: "0.6px", marginBottom: "18px" }}>{f.icon}</div>
                 <h3 style={{ fontSize: "17px", fontWeight: 700, color: C.navy, marginBottom: "10px", margin: "0 0 10px" }}>{f.title}</h3>
                 <p style={{ color: C.mid, fontSize: "14px", lineHeight: 1.75, margin: 0 }}>{f.desc}</p>
               </div>
@@ -369,7 +369,7 @@ const Landing = () => {
                 onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "0 4px 24px rgba(10,22,40,0.06)"; }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px", paddingBottom: "20px", borderBottom: `1px solid ${C.light}` }}>
-                  <span style={{ fontSize: "34px" }}>{r.icon}</span>
+                <span style={{ fontSize: "12px", fontWeight: 900, color: C.navy, background: "#eef2fb", borderRadius: "8px", padding: "6px 10px" }}>{r.icon}</span>
                   <h3 style={{ fontSize: "20px", fontWeight: 800, color: C.navy, margin: 0 }}>{r.role}</h3>
                 </div>
                 <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px", display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -474,7 +474,7 @@ const Landing = () => {
         <div style={S.container}>
           <div style={{ background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navyMid} 100%)`, borderRadius: "20px", padding: "70px 48px", textAlign: "center", boxShadow: "0 20px 60px rgba(10,22,40,0.2)", position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(to right, ${C.gold}, ${C.goldL}, ${C.gold})` }} />
-            <span style={{ fontSize: "52px" }}>🎓</span>
+            <span style={{ display: "inline-flex", width: "56px", height: "56px", alignItems: "center", justifyContent: "center", borderRadius: "12px", background: C.gold, color: C.navy, fontWeight: 900 }}>AX</span>
             <h2 style={{ color: C.white, fontSize: "clamp(26px,3vw,40px)", fontWeight: 900, margin: "16px 0 14px" }}>Ready to Transform Your Campus?</h2>
             <p style={{ color: "rgba(255,255,255,0.65)", fontSize: "16px", maxWidth: "500px", margin: "0 auto 36px", lineHeight: 1.75 }}>
               Launch your digital attendance revolution with the AttendX ecosystem. Dramatically streamline operations, automate faculty workflows, and boost your university's trajectory.
@@ -499,7 +499,7 @@ const Landing = () => {
           <div className="land-ftgrid" style={{ display: "grid", gap: "48px", paddingBottom: "48px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-                <div style={{ width: "40px", height: "40px", background: C.gold, borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>🎓</div>
+                <div style={{ width: "40px", height: "40px", background: C.gold, borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: C.navy, fontWeight: 900 }}>AX</div>
                 <div>
                   <div style={{ color: C.white, fontWeight: 900, fontSize: "16px" }}>AttendX</div>
                   <div style={{ color: C.gold, fontSize: "10px", letterSpacing: "2px" }}>ATTENDANCE OS</div>
@@ -521,7 +521,7 @@ const Landing = () => {
             </div>
             <div>
               <h4 style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "18px", marginTop: 0 }}>Contact</h4>
-              {["📍 University Campus, Main Road", "📞 +91 98765 43210", "📧 admin@attendx.edu"].map((l) => (
+              {["University Campus, Main Road", "+91 98765 43210", "admin@attendx.edu"].map((l) => (
                 <div key={l} style={{ color: "rgba(255,255,255,0.45)", fontSize: "13px", marginBottom: "10px" }}>{l}</div>
               ))}
             </div>

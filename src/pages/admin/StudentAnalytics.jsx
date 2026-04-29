@@ -98,17 +98,14 @@ const StudentAnalytics = () => {
     return acc;
   }, {});
 
-  const circumference = 2 * Math.PI * 54;
-  const strokeDash    = (pct / 100) * circumference;
-
   return (
-    <div className="min-h-screen bg-[#06070a] pt-16">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_8%_10%,#c7d2fe_0%,#eaf1ff_30%,#e9eefc_64%,#eef2ff_100%)] pt-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
 
         {/* Back */}
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-slate-500 hover:text-white transition-colors text-sm mb-6"
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors text-sm mb-6"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -119,7 +116,7 @@ const StudentAnalytics = () => {
         </button>
 
         {/* Student Info Card */}
-        <div className="analytics-card opacity-0 bg-[#151820] border border-white/5 rounded-2xl p-6 mb-5">
+        <div className="analytics-card opacity-0 bg-white/85 border border-white/60 rounded-2xl p-6 mb-5 shadow-[0_16px_30px_rgba(10,22,40,0.11)]">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
 
             {/* Avatar */}
@@ -131,10 +128,10 @@ const StudentAnalytics = () => {
 
             {/* Details */}
             <div className="flex-1">
-              <h1 className="font-bold text-2xl text-white">{student.name}</h1>
+              <h1 className="font-bold text-2xl text-slate-900">{student.name}</h1>
               <div className="flex flex-wrap items-center gap-3 mt-2">
-                <span className="text-slate-500 font-mono text-sm">
-                  {student.rollNumber}
+                <span className="text-slate-600 font-mono text-sm">
+                  {student.rollNumber || student.registrationNumber}
                 </span>
                 <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-400/20">
                   Section {student.section}
@@ -153,14 +150,14 @@ const StudentAnalytics = () => {
           {/* Attendance Bar */}
           <div className="mt-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-slate-400">Overall Attendance</span>
+              <span className="text-sm text-slate-600">Overall Attendance</span>
               <span className={`text-sm font-mono font-medium ${
                 isLow ? "text-rose-400" : "text-emerald-400"
               }`}>
                 {pct}%
               </span>
             </div>
-            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-1000 ${
                   isLow ? "bg-rose-500" : "bg-emerald-500"
@@ -189,19 +186,19 @@ const StudentAnalytics = () => {
             { label: "Absent",        value: records.filter(r => r.status === "absent").length,  color: "text-rose-400"    },
             { label: "Late",          value: records.filter(r => r.status === "late").length,    color: "text-amber-400"   },
           ].map((s, i) => (
-            <div key={i} className="bg-[#151820] border border-white/5 rounded-xl p-4 text-center">
+            <div key={i} className="bg-white/85 border border-white/60 rounded-xl p-4 text-center shadow-[0_10px_20px_rgba(10,22,40,0.08)]">
               <div className={`font-bold text-2xl mb-1 ${s.color || "text-white"}`}>
                 {s.value}
               </div>
-              <div className="text-slate-500 text-xs">{s.label}</div>
+              <div className="text-slate-600 text-xs">{s.label}</div>
             </div>
           ))}
         </div>
 
         {/* Subject Breakdown */}
         {Object.keys(subjectMap).length > 0 && (
-          <div className="analytics-card opacity-0 bg-[#151820] border border-white/5 rounded-2xl p-6 mb-5">
-            <h2 className="font-bold text-lg text-white mb-5">
+          <div className="analytics-card opacity-0 bg-white/85 border border-white/60 rounded-2xl p-6 mb-5 shadow-[0_16px_30px_rgba(10,22,40,0.11)]">
+            <h2 className="font-bold text-lg text-slate-900 mb-5">
               Subject-wise Breakdown
             </h2>
             <div className="space-y-4">
@@ -210,9 +207,9 @@ const StudentAnalytics = () => {
                 return (
                   <div key={subject}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-sm text-slate-300">{subject}</span>
+                      <span className="text-sm text-slate-800">{subject}</span>
                       <div className="flex items-center gap-3">
-                        <span className="text-slate-500 text-xs font-mono">
+                        <span className="text-slate-600 text-xs font-mono">
                           {data.present}/{data.total}
                         </span>
                         <span className={`text-xs font-mono font-medium w-10 text-right ${
@@ -222,7 +219,7 @@ const StudentAnalytics = () => {
                         </span>
                       </div>
                     </div>
-                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-700 ${
                           subPct >= 75 ? "bg-emerald-500" : "bg-rose-500"
@@ -239,7 +236,7 @@ const StudentAnalytics = () => {
 
         {/* Attendance Records Table */}
         <div className="analytics-card opacity-0">
-          <h2 className="font-bold text-lg text-white mb-4">
+          <h2 className="font-bold text-lg text-slate-900 mb-4">
             Attendance Records
           </h2>
           <AttendanceTable records={records} />

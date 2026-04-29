@@ -3,3 +3,61 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --ui-scale: 1.06;
+  --ui-text: #0f172a;
+  --ui-bg: #eef3ff;
+  --ui-border: #d9e2f3;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html {
+  font-size: calc(16px * var(--ui-scale));
+}
+
+body {
+  margin: 0;
+  color: var(--ui-text);
+  background: linear-gradient(180deg, #edf3ff 0%, #f6f9ff 100%);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition: all 0.2s ease;
+}
+
+button:hover,
+[role="button"]:hover {
+  transform: translateY(-1px);
+}
+
+table {
+  font-size: 0.92rem;
+}
+
+th {
+  font-size: 0.78rem;
+}
+
+input,
+select,
+textarea {
+  border-color: var(--ui-border);
+}
+
+@media (max-width: 768px) {
+  :root {
+    --ui-scale: 1;
+  }
+}
