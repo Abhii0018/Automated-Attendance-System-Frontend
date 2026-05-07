@@ -4,6 +4,21 @@ A full-stack attendance management system built with React + Vite, featuring rol
 
 ---
 
+## 🏗️ Project Architecture
+
+> **This repository is the Frontend** of the AttendX system.
+> The complete application is split into two separate services:
+
+| Layer | Repository | Description |
+|---|---|---|
+| 🎨 **Frontend** *(this repo)* | [Automated-Attendance-System-Frontend](https://github.com/Abhii0018/Automated-Attendance-System-Frontend) | React + Vite SPA — UI, routing, role-based views, GSAP animations |
+| ⚙️ **Backend** | [Automated-Attendance-System-Backend](https://github.com/Abhii0018/Automated-Attendance-System-Backend) | Node.js REST API — authentication, JWT, role management, attendance data |
+
+The frontend communicates with the backend over REST APIs (configured via `VITE_API_URL`).
+All authentication, data persistence, and business logic live in the **backend service** linked above.
+
+---
+
 ## Tech Stack
 
 | Layer | Tech |
