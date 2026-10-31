@@ -4,6 +4,12 @@
 import api from "./api";
 
 const attendanceService = {
+  // Public: real counts for landing / login pages (no login needed)
+  getPublicStats: async () => {
+    const response = await api.get("/attendance/public/stats");
+    return response.data;
+  },
+
   // Teacher/Admin: submit section attendance
   markAttendance: async (attendanceData) => {
     const response = await api.post("/attendance", attendanceData);
@@ -73,6 +79,24 @@ const attendanceService = {
 
   getMyAttendance: async (params = {}) => {
     const response = await api.get("/attendance/me", { params });
+    return response.data;
+  },
+
+  // Student: AI-written attendance tip
+  getMyAttendanceTip: async () => {
+    const response = await api.get("/attendance/me/ai-tip");
+    return response.data;
+  },
+
+  // Student: ask the AI a question about their own attendance
+  askAttendanceQuestion: async (question, history = []) => {
+    const response = await api.post("/attendance/me/ask", { question, history });
+    return response.data;
+  },
+
+  // Admin: email today's absence summary to parents now
+  sendDailyParentSummaries: async (date) => {
+    const response = await api.post("/attendance/admin/notify-daily-absences", { date });
     return response.data;
   },
 
