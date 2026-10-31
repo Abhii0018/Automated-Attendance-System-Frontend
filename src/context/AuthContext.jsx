@@ -1,8 +1,8 @@
-import { createContext, useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { TOKEN_KEY, USER_KEY } from "../utils/constants";
 import authService from "../services/authService";
+import { AuthContext } from "./authContextValue";
 
-export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   /*

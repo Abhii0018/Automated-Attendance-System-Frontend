@@ -1,7 +1,7 @@
 // useAuth hook placeholder
 
 import { useContext } from "react";
-import { AuthContext } from "../context/AuthContext";
+import { AuthContext } from "../context/authContextValue";
 
 const useAuth = () => {
   const context = useContext(AuthContext);
