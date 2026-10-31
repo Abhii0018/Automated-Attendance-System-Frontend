@@ -1,26 +1,71 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ATTENDANCE_THRESHOLD } from "../utils/constants";
+import { Avatar, EmptyState, Icon, ProgressBar, Skeleton } from "./ui";
 
-const STATUS_STYLES = {
-  present: "bg-emerald-500/10 text-emerald-400 border border-emerald-400/20",
-  absent: "bg-rose-500/10 text-rose-400 border border-rose-400/20",
-  late: "bg-amber-500/10 text-amber-400 border border-amber-400/20",
+/*
+  Attendance records table, shared by Student Analytics and Section Attendance.
+  Backend statuses come as "Present" / "Absent"; older code used lowercase and "late",
+  so statuses are normalised here.
+*/
+
+const STATUS = {
+  present: { label: "Present", badge: "ax-badge-success", icon: "check" },
+  absent: { label: "Absent", badge: "ax-badge-danger", icon: "x" },
+  late: { label: "Late", badge: "ax-badge-warning", icon: "clock" },
+};
+
+const normalizeStatus = (status) => {
+  const s = String(status || "").trim().toLowerCase();
+  return STATUS[s] ? s : "absent";
+};
+
+export const StatusBadge = ({ status }) => {
+  const s = STATUS[normalizeStatus(status)];
+  return (
+    <span className={`ax-badge ${s.badge}`}>
+      <Icon name={s.icon} size={12} />
+      {s.label}
+    </span>
+  );
+};
+
+const formatDate = (date) => {
+  if (!date) return "—";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+const weekday = (date) => {
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { weekday: "short" });
 };
 
 const AttendanceTable = ({
   records = [],
   showStudent = false,
+  showDate = true,
+  showSubject = true,
+  showRegistration = false,
+  showPeriod = false,
   loading = false,
+  pageSize = 25,
+  emptyTitle = "No attendance records found",
+  emptyMessage,
 }) => {
+  const [visible, setVisible] = useState(pageSize);
+
   if (loading) {
     return (
-      <div className="bg-[#151820] border border-white/5 rounded-2xl p-6">
-        <div className="space-y-3">
-          {[...Array(5)].map((_, i) => (
-            <div
-              key={i}
-              className="h-12 bg-slate-800/50 rounded-lg animate-pulse"
-              style={{ animationDelay: `${i * 0.1}s` }}
-            />
+      <div className="ax-card ax-card-pad" aria-busy="true" aria-label="Loading records">
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <Skeleton height={32} width={32} radius={10} />
+              <Skeleton height={14} width="30%" />
+              <Skeleton height={14} width="20%" style={{ marginLeft: "auto" }} />
+            </div>
           ))}
         </div>
       </div>
@@ -29,101 +74,128 @@ const AttendanceTable = ({
 
   if (!records.length) {
     return (
-      <div className="bg-[#151820] border border-white/5 rounded-2xl flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mb-4">
-          <svg className="w-7 h-7 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-            />
-          </svg>
-        </div>
-        <p className="text-slate-400 text-sm">No attendance records found</p>
+      <div className="ax-card">
+        <EmptyState icon="clipboard" title={emptyTitle} message={emptyMessage} />
       </div>
     );
   }
 
+  const showPct = records[0]?.percentage !== undefined;
+  const shown = records.slice(0, visible);
+
   return (
-    <div className="bg-[#151820] border border-white/5 rounded-2xl overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
+    <div className="ax-card" style={{ overflow: "hidden" }}>
+      <div className="ax-table-wrap">
+        <table className="ax-table">
           <thead>
-            <tr className="border-b border-white/5">
-              <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Date
-              </th>
-              {showStudent && (
-                <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Student
-                </th>
-              )}
-              <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Subject
-              </th>
-              <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Status
-              </th>
-              {records[0]?.percentage !== undefined && (
-                <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Attendance %
-                </th>
-              )}
+            <tr>
+              {showStudent && <th scope="col">Student</th>}
+              {showRegistration && <th scope="col">Registration no.</th>}
+              {showDate && <th scope="col">Date</th>}
+              {showPeriod && <th scope="col">Period</th>}
+              {showSubject && <th scope="col">Subject</th>}
+              <th scope="col">Status</th>
+              {showPct && <th scope="col">Attendance %</th>}
             </tr>
           </thead>
           <tbody>
-            {records.map((record, idx) => (
-              <tr
-                key={record._id || idx}
-                className="border-b border-white/5 hover:bg-white/[0.02] transition-colors duration-150"
-              >
-                <td className="px-6 py-4 font-mono text-sm text-slate-400">
-                  {record.date
-                    ? new Date(record.date).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })
-                    : "—"}
-                </td>
-                {showStudent && (
-                  <td className="px-6 py-4 text-sm text-slate-200">
-                    {record.studentName || record.student?.name || "—"}
-                  </td>
-                )}
-                <td className="px-6 py-4 text-sm text-slate-300">
-                  {record.subject || "—"}
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[record.status] || STATUS_STYLES.absent}`}>
-                    {record.status || "absent"}
-                  </span>
-                </td>
-                {record.percentage !== undefined && (
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            record.percentage >= ATTENDANCE_THRESHOLD
-                              ? "bg-emerald-500"
-                              : "bg-rose-500"
-                          }`}
-                          style={{ width: `${record.percentage}%` }}
-                        />
+            {shown.map((record, idx) => {
+              const name = record.studentName || record.student?.name || "—";
+              const studentId = record.studentId || record.student?._id;
+              return (
+                <tr key={record._id || idx}>
+                  {showStudent && (
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 160 }}>
+                        <Avatar name={name} size={30} />
+                        {studentId ? (
+                          <Link
+                            to={`/admin/students/${studentId}/analytics`}
+                            style={{ fontWeight: 600, color: "var(--ax-text)", textDecoration: "none" }}
+                            className="hover:underline"
+                          >
+                            {name}
+                          </Link>
+                        ) : (
+                          <span style={{ fontWeight: 600, color: "var(--ax-text)" }}>{name}</span>
+                        )}
                       </div>
-                      <span className={`text-xs font-mono font-medium ${
-                        record.percentage >= ATTENDANCE_THRESHOLD
-                          ? "text-emerald-400"
-                          : "text-rose-400"
-                      }`}>
-                        {record.percentage}%
-                      </span>
-                    </div>
+                    </td>
+                  )}
+                  {showRegistration && (
+                    <td style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 13, whiteSpace: "nowrap" }}>
+                      {record.registrationNumber || "—"}
+                    </td>
+                  )}
+                  {showDate && (
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <div style={{ color: "var(--ax-text)", fontWeight: 500 }}>{formatDate(record.date)}</div>
+                      <div style={{ fontSize: 12, color: "var(--ax-muted)" }}>{weekday(record.date)}</div>
+                    </td>
+                  )}
+                  {showPeriod && (
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {record.period ? <span className="ax-badge">P{record.period}</span> : "—"}
+                    </td>
+                  )}
+                  {showSubject && <td style={{ whiteSpace: "nowrap" }}>{record.subject || "—"}</td>}
+                  <td>
+                    <StatusBadge status={record.status} />
                   </td>
-                )}
-              </tr>
-            ))}
+                  {showPct && (
+                    <td style={{ minWidth: 150 }}>
+                      {record.percentage !== undefined && record.percentage !== null ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ flex: 1 }}>
+                            <ProgressBar value={record.percentage} threshold={ATTENDANCE_THRESHOLD} />
+                          </div>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              fontVariantNumeric: "tabular-nums",
+                              color: record.percentage >= ATTENDANCE_THRESHOLD ? "var(--ax-text)" : "var(--ax-danger)",
+                            }}
+                          >
+                            {record.percentage}%
+                          </span>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          padding: "12px 16px",
+          borderTop: "1px solid var(--ax-border)",
+          background: "var(--ax-surface-2)",
+          fontSize: 13,
+          color: "var(--ax-muted)",
+        }}
+      >
+        <span>
+          Showing <strong style={{ color: "var(--ax-text)" }}>{shown.length}</strong> of {records.length} record
+          {records.length !== 1 ? "s" : ""}
+        </span>
+        {records.length > visible && (
+          <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" onClick={() => setVisible((v) => v + pageSize)}>
+            Show {Math.min(pageSize, records.length - visible)} more
+            <Icon name="chevronDown" size={14} />
+          </button>
+        )}
       </div>
     </div>
   );

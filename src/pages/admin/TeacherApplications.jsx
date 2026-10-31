@@ -1,22 +1,144 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { gsap } from "gsap";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import authService from "../../services/authService";
 import useAuth from "../../hooks/useAuth";
+import useToast from "../../hooks/useToast";
+import { PageHeader, StatCard, SkeletonRows, EmptyState, Avatar, Alert, Icon } from "../../components/ui";
 
-const C = {
-  navy: "#0a1628",
-  navyMid: "#102040",
-  gold: "#c9a84c",
-  white: "#ffffff",
-  light: "#f4f6fa",
-  border: "#dde3ef",
-  mid: "#6b7280",
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null);
+const fmtDateTime = (d) => (d ? new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-");
+
+// Card with a consistent header row.
+const Panel = ({ id, title, subtitle, icon, count, actions, children, flush = false }) => (
+  <section id={id} className="ax-card ax-fade-up" style={{ overflow: "hidden", scrollMarginTop: 88 }}>
+    <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "18px 22px", borderBottom: "1px solid var(--ax-border)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        {icon && (
+          <span style={{ width: 36, height: 36, borderRadius: 10, background: "var(--ax-surface-2)", border: "1px solid var(--ax-border)", color: "var(--ax-navy)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name={icon} size={18} />
+          </span>
+        )}
+        <div style={{ minWidth: 0 }}>
+          <h2 className="ax-section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {title}
+            {typeof count === "number" && <span className={`ax-badge ${count > 0 ? "ax-badge-warning" : ""}`}>{count}</span>}
+          </h2>
+          {subtitle && <p className="ax-section-sub">{subtitle}</p>}
+        </div>
+      </div>
+      {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>{actions}</div>}
+    </header>
+    <div style={flush ? undefined : { padding: 22 }}>{children}</div>
+  </section>
+);
+
+// Smoothly expanding region (animates height via grid rows).
+const Collapse = ({ open, id, children }) => (
+  <div id={id} aria-hidden={!open} style={{ display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows .3s var(--ax-ease)" }}>
+    <div style={{ overflow: "hidden", minHeight: 0 }} inert={open ? undefined : true}>
+      {children}
+    </div>
+  </div>
+);
+
+const DetailTile = ({ label, value, icon }) => (
+  <div style={{ background: "var(--ax-surface)", border: "1px solid var(--ax-border)", borderRadius: 10, padding: "10px 12px", minWidth: 0 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ax-muted)", marginBottom: 4 }}>
+      {icon && <Icon name={icon} size={13} />}
+      {label}
+    </div>
+    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ax-text)", overflowWrap: "anywhere" }}>{value}</div>
+  </div>
+);
+
+const StatusBadge = ({ status }) => (
+  <span className={`ax-badge ${status === "approved" ? "ax-badge-success" : status === "rejected" ? "ax-badge-danger" : "ax-badge-warning"}`} style={{ textTransform: "capitalize" }}>
+    <span className="ax-dot" /> {status || "-"}
+  </span>
+);
+
+// Confirmation dialog for rejecting a request, with an optional reason.
+const RejectDialog = ({ target, busy, onCancel, onConfirm }) => {
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onCancel]);
+
+  return (
+    <div
+      onClick={() => !busy && onCancel()}
+      style={{ position: "fixed", inset: 0, zIndex: 90, background: "rgba(11,21,48,0.45)", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ta-reject-title"
+        className="ax-card ax-card-pad ax-fade-up"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 440, boxShadow: "var(--ax-shadow-lg)" }}
+      >
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, background: "var(--ax-danger-soft)", color: "var(--ax-danger)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="alert" size={20} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <h3 id="ta-reject-title" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--ax-text)" }}>
+              Reject {target.kind}?
+            </h3>
+            <p style={{ margin: "4px 0 0", fontSize: 14, color: "var(--ax-muted)" }}>
+              <strong style={{ color: "var(--ax-text-2)" }}>{target.name}</strong> will not be able to sign in with this role.
+            </p>
+          </div>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConfirm(reason.trim());
+          }}
+          style={{ marginTop: 18 }}
+        >
+          <label htmlFor="ta-reject-reason" className="ax-label">
+            Rejection reason <span style={{ fontWeight: 400, color: "var(--ax-muted)" }}>(optional)</span>
+          </label>
+          <textarea
+            id="ta-reject-reason"
+            className="ax-input"
+            autoFocus
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Qualification documents missing"
+            maxLength={300}
+          />
+          <div className="ax-help">Shown in the review history.</div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
+            <button type="button" className="ax-btn ax-btn-secondary" onClick={onCancel} disabled={busy}>
+              Cancel
+            </button>
+            <button type="submit" className="ax-btn ax-btn-danger" disabled={busy} style={{ borderColor: "var(--ax-danger)" }}>
+              {busy ? <span className="ax-spinner" aria-hidden="true" /> : <Icon name="xCircle" size={16} />}
+              {busy ? "Rejecting…" : "Reject"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };
-const PAGE_W = "min(97vw, 1640px)";
+
+const HISTORY_FILTERS = [
+  { value: "all", label: "All history" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+];
 
 const TeacherApplications = () => {
   const { user } = useAuth();
+  const toast = useToast();
+  const location = useLocation();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const [pending, setPending] = useState([]);
   const [reviewed, setReviewed] = useState([]);
@@ -28,90 +150,89 @@ const TeacherApplications = () => {
   const [reviewingAdminId, setReviewingAdminId] = useState("");
   const [expandedTeacherId, setExpandedTeacherId] = useState("");
   const [expandedAdminId, setExpandedAdminId] = useState("");
+  const [rejectTarget, setRejectTarget] = useState(null);
 
   const [search, setSearch] = useState("");
   const [historyFilter, setHistoryFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
 
-  const fetchData = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const requests = [
-        authService.getPendingTeacherApplications(),
-        authService.getReviewedTeacherApplications(),
-      ];
-      if (isSuperAdmin) {
-        requests.push(authService.getPendingAdminRequests(), authService.getReviewedAdminRequests());
+  // `silent` refreshes data in place (after an approve/reject) without showing skeletons.
+  const fetchData = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) {
+        setLoading(true);
+        setError("");
       }
+      try {
+        const requests = [authService.getPendingTeacherApplications(), authService.getReviewedTeacherApplications()];
+        if (isSuperAdmin) {
+          requests.push(authService.getPendingAdminRequests(), authService.getReviewedAdminRequests());
+        }
 
-      const responses = await Promise.all(requests);
-      const [pendingRes, reviewedRes, pendingAdminRes, reviewedAdminRes] = responses;
-      setPending(pendingRes.data || []);
-      setReviewed(reviewedRes.data || []);
-      setPendingAdmins(pendingAdminRes?.data || []);
-      setReviewedAdmins(reviewedAdminRes?.data || []);
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to load teacher applications.");
-    } finally {
-      setLoading(false);
-    }
-  };
+        const responses = await Promise.all(requests);
+        const [pendingRes, reviewedRes, pendingAdminRes, reviewedAdminRes] = responses;
+        setPending(pendingRes.data || []);
+        setReviewed(reviewedRes.data || []);
+        setPendingAdmins(pendingAdminRes?.data || []);
+        setReviewedAdmins(reviewedAdminRes?.data || []);
+        setError("");
+      } catch (err) {
+        setError(err.response?.data?.message || "Failed to load teacher applications.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isSuperAdmin]
+  );
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchData({ silent: true });
+  }, [fetchData]);
 
+  // Support deep links such as /admin/teacher-applications#pending-admin-requests
   useEffect(() => {
-    if (!loading) {
-      gsap.fromTo(
-        ".ta-anim",
-        { opacity: 0, y: 16 },
-        { opacity: 1, y: 0, stagger: 0.07, duration: 0.5, ease: "power3.out" }
-      );
-    }
-  }, [loading, currentPage, search, historyFilter]);
+    if (loading || !location.hash) return;
+    const el = document.getElementById(location.hash.slice(1));
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [loading, location.hash]);
 
-  const onReview = async (teacherId, action) => {
+  const onReview = async (teacherId, action, reason = "") => {
+    const t = pending.find((p) => p._id === teacherId);
     setReviewingId(teacherId);
     try {
-      let reason = "";
-      if (action === "reject") {
-        reason = window.prompt("Enter rejection reason (optional):") || "";
-      }
       await authService.reviewTeacherApplication(teacherId, action, reason);
-      await fetchData();
+      toast.success(`${t?.name || "Application"} ${action === "approve" ? "approved — they can now sign in" : "rejected"}`);
+      setRejectTarget(null);
+      await fetchData({ silent: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to review application.");
+      toast.error(err.response?.data?.message || "Failed to review application.");
     } finally {
       setReviewingId("");
     }
   };
 
-  const onReviewAdmin = async (adminId, action) => {
+  const onReviewAdmin = async (adminId, action, reason = "") => {
+    const a = pendingAdmins.find((p) => p._id === adminId);
     setReviewingAdminId(adminId);
     try {
-      let reason = "";
-      if (action === "reject") {
-        reason = window.prompt("Enter rejection reason (optional):") || "";
-      }
       await authService.reviewAdminRequest(adminId, action, reason);
-      await fetchData();
+      toast.success(`${a?.name || "Admin request"} ${action === "approve" ? "approved" : "rejected"}`);
+      setRejectTarget(null);
+      await fetchData({ silent: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to review admin request.");
+      toast.error(err.response?.data?.message || "Failed to review admin request.");
     } finally {
       setReviewingAdminId("");
     }
   };
 
+  const closeReject = useCallback(() => setRejectTarget(null), []);
+
   const filteredPending = useMemo(() => {
     const q = search.toLowerCase();
     return pending.filter(
-      (t) =>
-        t.name?.toLowerCase().includes(q) ||
-        t.email?.toLowerCase().includes(q) ||
-        t.primarySubject?.toLowerCase().includes(q)
+      (t) => t.name?.toLowerCase().includes(q) || t.email?.toLowerCase().includes(q) || t.primarySubject?.toLowerCase().includes(q)
     );
   }, [pending, search]);
 
@@ -119,23 +240,26 @@ const TeacherApplications = () => {
     const q = search.toLowerCase();
     return reviewed
       .filter((t) => (historyFilter === "all" ? true : t.approvalStatus === historyFilter))
-      .filter(
-        (t) =>
-          t.name?.toLowerCase().includes(q) ||
-          t.email?.toLowerCase().includes(q) ||
-          t.primarySubject?.toLowerCase().includes(q)
-      );
+      .filter((t) => t.name?.toLowerCase().includes(q) || t.email?.toLowerCase().includes(q) || t.primarySubject?.toLowerCase().includes(q));
   }, [reviewed, search, historyFilter]);
 
-  useEffect(() => {
+  const updateSearch = (value) => {
+    setSearch(value);
     setCurrentPage(1);
-  }, [search, historyFilter]);
+  };
+  const updateHistoryFilter = (value) => {
+    setHistoryFilter(value);
+    setCurrentPage(1);
+  };
 
   const totalPages = Math.max(1, Math.ceil(filteredReviewed.length / rowsPerPage));
   const paginatedReviewed = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
     return filteredReviewed.slice(start, start + rowsPerPage);
   }, [filteredReviewed, currentPage]);
+
+  const approvedCount = reviewed.filter((t) => t.approvalStatus === "approved").length;
+  const rejectedCount = reviewed.filter((t) => t.approvalStatus === "rejected").length;
 
   const exportReviewedCsv = () => {
     if (!filteredReviewed.length) return;
@@ -179,314 +303,391 @@ const TeacherApplications = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    toast.success(`Exported ${filteredReviewed.length} record${filteredReviewed.length === 1 ? "" : "s"} to CSV`);
   };
 
+  const rejectBusy = rejectTarget ? (rejectTarget.type === "teacher" ? reviewingId : reviewingAdminId) === rejectTarget.id : false;
+
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 8% 10%, #c7d2fe 0%, #eaf1ff 30%, #e9eefc 64%, #eef2ff 100%)", fontFamily: "'Segoe UI','Inter',Arial,sans-serif" }}>
-      <div style={{ background: `linear-gradient(120deg, ${C.navy} 0%, ${C.navyMid} 55%, #173465 100%)`, paddingTop: "88px", paddingBottom: "48px", position: "relative" }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(to right, ${C.gold}, #e8c96a, ${C.gold})` }} />
-        <div style={{ width: PAGE_W, margin: "0 auto", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h1 style={{ color: C.white, margin: 0, fontSize: "44px", fontWeight: 900 }}>Teacher Applications</h1>
-            <p style={{ color: "rgba(255,255,255,0.65)", marginTop: "8px", fontSize: "17px" }}>Super Admin approval queue and review history</p>
-          </div>
-          <Link to="/admin/dashboard" style={{ color: C.white, textDecoration: "none", border: "1px solid rgba(255,255,255,0.3)", padding: "8px 14px", borderRadius: "8px", fontSize: "13px" }}>
-            Back to Dashboard
-          </Link>
-        </div>
-      </div>
+    <div className="ax-page">
+      <div className="ax-container">
+        <PageHeader
+          eyebrow="Admin workspace · Approvals"
+          title="Teacher Applications"
+          subtitle="Super Admin approval queue and review history"
+          actions={
+            <>
+              <Link to="/admin/dashboard" className="ax-btn ax-btn-secondary">
+                <Icon name="arrowLeft" size={16} /> Dashboard
+              </Link>
+              <button type="button" className="ax-btn ax-btn-primary" onClick={() => fetchData()} disabled={loading}>
+                {loading ? <span className="ax-spinner" aria-hidden="true" /> : <Icon name="refresh" size={16} />}
+                Refresh
+              </button>
+            </>
+          }
+        />
 
-      <div style={{ width: PAGE_W, margin: "0 auto", padding: "34px 24px 54px" }}>
-        <div className="ta-anim ta-search-row" style={{ display: "flex", gap: "14px", marginBottom: "24px" }}>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email, or subject"
-            style={{ flex: 1, padding: "16px 16px", border: `1px solid ${C.border}`, borderRadius: "14px", fontSize: "16px", background: "rgba(255,255,255,0.9)", boxShadow: "0 12px 24px rgba(10,22,40,0.1)", outline: "none" }}
-          />
-          <select
-            value={historyFilter}
-            onChange={(e) => setHistoryFilter(e.target.value)}
-            style={{ padding: "16px 16px", border: `1px solid ${C.border}`, borderRadius: "14px", fontSize: "16px", background: "rgba(255,255,255,0.9)", boxShadow: "0 12px 24px rgba(10,22,40,0.1)", outline: "none" }}
-          >
-            <option value="all">All History</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </div>
-
-        {error && (
-          <div style={{ marginBottom: "14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "8px", padding: "10px 12px", color: "#b91c1c", fontSize: "13px" }}>
-            {error}
-          </div>
-        )}
-
-        <div className="ta-anim ta-hover-card" style={{ background: "rgba(255,255,255,0.82)", border: "1px solid rgba(255,255,255,0.65)", borderRadius: "16px", padding: "22px", marginBottom: "24px", boxShadow: "0 12px 28px rgba(10,22,40,0.1)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
-          <h2 style={{ margin: "0 0 16px", fontSize: "20px", color: C.navy }}>Pending Applications (Super Admin Approval)</h2>
-          {!isSuperAdmin && (
-            <div style={{ marginBottom: "12px", background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", borderRadius: "8px", padding: "8px 10px", fontSize: "12px" }}>
-              Teacher and admin requests can be approved only by Super Admin.
-            </div>
-          )}
-          {loading ? (
-            <div style={{ color: C.mid }}>Loading...</div>
-          ) : filteredPending.length === 0 ? (
-            <div style={{ color: C.mid, fontSize: "13px" }}>No pending applications found.</div>
+        <div className="ax-stagger grid gap-4 grid-cols-2 xl:grid-cols-4" style={{ marginBottom: 24 }}>
+          <StatCard label="Pending applications" value={pending.length} icon="clock" tone="warning" hint="Awaiting decision" loading={loading} />
+          <StatCard label="Approved" value={approvedCount} icon="checkCircle" tone="success" hint="Teachers onboarded" loading={loading} />
+          <StatCard label="Rejected" value={rejectedCount} icon="xCircle" tone="danger" hint="Applications declined" loading={loading} />
+          {isSuperAdmin ? (
+            <StatCard label="Admin requests" value={pendingAdmins.length} icon="shield" tone="blue" hint={`${reviewedAdmins.length} reviewed so far`} loading={loading} />
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {filteredPending.map((t) => (
-                <div key={t._id} style={{ border: `1px solid ${C.border}`, background: "rgba(244,246,250,0.96)", borderRadius: "14px", padding: "16px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "280px" }}>
-                      <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "linear-gradient(135deg, #0a1628, #102040)", color: "#c9a84c", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "13px" }}>
-                        {(t.name || "T").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 800, color: C.navy, fontSize: "17px" }}>{t.name}</div>
-                        <div style={{ fontSize: "14px", color: C.mid }}>Subject: {t.primarySubject || "N/A"}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                      <span style={{ padding: "3px 10px", borderRadius: "999px", background: "#fee2e2", border: "1px solid #fecaca", color: "#b91c1c", fontSize: "11px", fontWeight: 700 }}>
-                        Pending
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedTeacherId(expandedTeacherId === t._id ? "" : t._id)}
-                        style={{ border: `1px solid ${C.border}`, background: "#fff", color: C.navy, borderRadius: "9px", padding: "8px 12px", cursor: "pointer", fontWeight: 700, fontSize: "13px" }}
-                      >
-                        {expandedTeacherId === t._id ? "Hide Details" : "View Details"}
-                      </button>
-                      <button
-                        onClick={() => onReview(t._id, "approve")}
-                        disabled={!isSuperAdmin || reviewingId === t._id}
-                        style={{ border: "none", background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", borderRadius: "9px", padding: "8px 14px", cursor: !isSuperAdmin || reviewingId === t._id ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "13px" }}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => onReview(t._id, "reject")}
-                        disabled={!isSuperAdmin || reviewingId === t._id}
-                        style={{ border: "none", background: "linear-gradient(135deg, #dc2626, #b91c1c)", color: "#fff", borderRadius: "9px", padding: "8px 14px", cursor: !isSuperAdmin || reviewingId === t._id ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "13px" }}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: expandedTeacherId === t._id ? "12px" : 0,
-                      paddingTop: expandedTeacherId === t._id ? "12px" : 0,
-                      borderTop: expandedTeacherId === t._id ? `1px solid ${C.border}` : "none",
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
-                      gap: "12px",
-                      maxHeight: expandedTeacherId === t._id ? "340px" : "0px",
-                      opacity: expandedTeacherId === t._id ? 1 : 0,
-                      overflow: "hidden",
-                      transition: "max-height .35s ease, opacity .25s ease, margin .25s ease, padding .25s ease",
-                    }}
-                  >
-                      <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: "10px", padding: "10px" }}>
-                        <div style={{ fontSize: "11px", color: C.mid, marginBottom: "4px" }}>Email</div>
-                        <div style={{ fontSize: "14px", fontWeight: 600, color: C.navy }}>{t.email || "N/A"}</div>
-                      </div>
-                      <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: "10px", padding: "10px" }}>
-                        <div style={{ fontSize: "11px", color: C.mid, marginBottom: "4px" }}>Experience</div>
-                        <div style={{ fontSize: "14px", fontWeight: 600, color: C.navy }}>{t.yearsOfExperience || 0} years</div>
-                      </div>
-                      <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: "10px", padding: "10px" }}>
-                        <div style={{ fontSize: "11px", color: C.mid, marginBottom: "4px" }}>Qualification</div>
-                        <div style={{ fontSize: "14px", fontWeight: 600, color: C.navy }}>{t.highestQualification || "N/A"}</div>
-                      </div>
-                      <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: "10px", padding: "10px" }}>
-                        <div style={{ fontSize: "11px", color: C.mid, marginBottom: "4px" }}>Background</div>
-                        <div style={{ fontSize: "14px", fontWeight: 600, color: C.navy }}>{t.educationalBackground || "N/A"}</div>
-                      </div>
-                  </div>
-                </div>
+            <StatCard label="Total reviewed" value={reviewed.length} icon="layers" tone="blue" hint="Approved + rejected" loading={loading} />
+          )}
+        </div>
+
+        <div style={{ display: "grid", gap: 16, marginBottom: 24 }}>
+          {!isSuperAdmin && (
+            <Alert tone="warning" title="View only">
+              Teacher and admin requests can be approved only by Super Admin.
+            </Alert>
+          )}
+          {error && (
+            <Alert tone="danger" title="Couldn't load applications">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <span>{error}</span>
+                <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" onClick={() => fetchData()}>
+                  <Icon name="refresh" size={14} /> Retry
+                </button>
+              </div>
+            </Alert>
+          )}
+
+          {/* Toolbar */}
+          <div className="ax-card ax-fade-up" style={{ padding: 14, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ position: "relative", flex: "1 1 260px", minWidth: 0 }}>
+              <label htmlFor="ta-search" className="sr-only">
+                Search applications
+              </label>
+              <Icon name="search" size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--ax-muted)" }} />
+              <input
+                id="ta-search"
+                type="search"
+                className="ax-input"
+                value={search}
+                onChange={(e) => updateSearch(e.target.value)}
+                placeholder="Search by name, email, or subject"
+                style={{ paddingLeft: 38 }}
+              />
+            </div>
+            <div role="group" aria-label="Filter review history" style={{ display: "inline-flex", padding: 4, gap: 4, borderRadius: 12, background: "var(--ax-surface-2)", border: "1px solid var(--ax-border)", flexWrap: "wrap" }}>
+              {HISTORY_FILTERS.map((f) => (
+                <button
+                  key={f.value}
+                  type="button"
+                  aria-pressed={historyFilter === f.value}
+                  onClick={() => updateHistoryFilter(f.value)}
+                  className={`ax-btn ax-btn-sm ${historyFilter === f.value ? "ax-btn-primary" : "ax-btn-ghost"}`}
+                >
+                  {f.label}
+                </button>
               ))}
             </div>
-          )}
+          </div>
         </div>
 
-        {isSuperAdmin && (
-          <div id="pending-admin-requests" className="ta-anim ta-hover-card" style={{ background: "rgba(255,255,255,0.82)", border: "1px solid rgba(255,255,255,0.65)", borderRadius: "14px", padding: "16px", marginBottom: "20px", boxShadow: "0 12px 28px rgba(10,22,40,0.1)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", scrollMarginTop: "110px" }}>
-            <h2 style={{ margin: "0 0 12px", fontSize: "17px", color: C.navy }}>Pending Admin Requests</h2>
+        <div style={{ display: "grid", gap: 24 }}>
+          {/* Pending teacher applications */}
+          <Panel
+            title="Pending applications"
+            subtitle="Super Admin approval required before a teacher can sign in"
+            icon="briefcase"
+            count={loading ? undefined : filteredPending.length}
+          >
             {loading ? (
-              <div style={{ color: C.mid }}>Loading...</div>
-            ) : pendingAdmins.length === 0 ? (
-              <div style={{ color: C.mid, fontSize: "13px" }}>No pending admin requests found.</div>
+              <SkeletonRows rows={3} height={76} />
+            ) : filteredPending.length === 0 ? (
+              <EmptyState
+                icon={search ? "search" : "checkCircle"}
+                title={search ? "No matching applications" : "No pending applications"}
+                message={search ? `Nothing matches "${search}".` : "New teacher sign-ups will appear here for review."}
+              />
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {pendingAdmins.map((a) => (
-                  <div key={a._id} style={{ border: `1px solid ${C.border}`, background: "rgba(244,246,250,0.9)", borderRadius: "12px", padding: "14px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ fontWeight: 700, color: C.navy }}>{a.name}</div>
-                        <div style={{ fontSize: "13px", color: C.mid, marginTop: "2px" }}>{a.department || "N/A"} · {a.designation || "N/A"}</div>
+              <div className="ax-stagger" style={{ display: "grid", gap: 12 }}>
+                {filteredPending.map((t) => {
+                  const open = expandedTeacherId === t._id;
+                  const busy = reviewingId === t._id;
+                  const detailsId = `ta-details-${t._id}`;
+                  return (
+                    <article key={t._id} className="ta-item" data-open={open || undefined}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          className="ta-toggle"
+                          aria-expanded={open}
+                          aria-controls={detailsId}
+                          onClick={() => setExpandedTeacherId(open ? "" : t._id)}
+                        >
+                          <Avatar name={t.name || "T"} size={44} />
+                          <span style={{ minWidth: 0, textAlign: "left" }}>
+                            <span style={{ display: "block", fontWeight: 700, color: "var(--ax-text)", fontSize: 15 }}>{t.name}</span>
+                            <span style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 4, fontSize: 13, color: "var(--ax-muted)" }}>
+                              <span className="ax-badge ax-badge-info">{t.primarySubject || "N/A"}</span>
+                              {t.createdAt && <span>Applied {fmtDate(t.createdAt)}</span>}
+                            </span>
+                          </span>
+                          <Icon name="chevronDown" size={18} className="ta-chevron" style={{ color: "var(--ax-muted)", marginLeft: "auto" }} />
+                        </button>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <StatusBadge status="pending" />
+                          <button
+                            type="button"
+                            className="ax-btn ax-btn-success ax-btn-sm"
+                            onClick={() => onReview(t._id, "approve")}
+                            disabled={!isSuperAdmin || busy}
+                          >
+                            {busy && !rejectTarget ? <span className="ax-spinner" aria-hidden="true" /> : <Icon name="check" size={14} />}
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            className="ax-btn ax-btn-danger ax-btn-sm"
+                            onClick={() => setRejectTarget({ type: "teacher", id: t._id, name: t.name, kind: "teacher application" })}
+                            disabled={!isSuperAdmin || busy}
+                          >
+                            <Icon name="x" size={14} /> Reject
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedAdminId(expandedAdminId === a._id ? "" : a._id)}
-                        style={{ border: `1px solid ${C.border}`, background: "#fff", color: C.navy, borderRadius: "8px", padding: "6px 10px", cursor: "pointer", fontWeight: 700, fontSize: "12px" }}
-                      >
-                        {expandedAdminId === a._id ? "Hide Details" : "View Details"}
-                      </button>
-                    </div>
-                    {expandedAdminId === a._id && (
-                      <div style={{ marginTop: "10px", fontSize: "13px", color: C.mid, display: "grid", gap: "4px" }}>
-                        <div>Email: {a.email || "N/A"}</div>
-                        <div>Phone: {a.phone || "N/A"}</div>
-                        <div>Reason: {a.adminAccessReason || "N/A"}</div>
-                      </div>
-                    )}
-                    <div style={{ marginTop: "10px", display: "flex", gap: "8px" }}>
-                      <button
-                        onClick={() => onReviewAdmin(a._id, "approve")}
-                        disabled={reviewingAdminId === a._id}
-                        style={{ border: "none", background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", borderRadius: "8px", padding: "7px 12px", cursor: reviewingAdminId === a._id ? "not-allowed" : "pointer", fontWeight: 600 }}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => onReviewAdmin(a._id, "reject")}
-                        disabled={reviewingAdminId === a._id}
-                        style={{ border: "none", background: "linear-gradient(135deg, #dc2626, #b91c1c)", color: "#fff", borderRadius: "8px", padding: "7px 12px", cursor: reviewingAdminId === a._id ? "not-allowed" : "pointer", fontWeight: 600 }}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                      <Collapse open={open} id={detailsId}>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--ax-border)" }}>
+                          <DetailTile label="Email" icon="mail" value={t.email || "N/A"} />
+                          {t.phone && <DetailTile label="Phone" icon="phone" value={t.phone} />}
+                          <DetailTile label="Experience" icon="briefcase" value={`${t.yearsOfExperience || 0} years`} />
+                          <DetailTile label="Qualification" icon="teacher" value={t.highestQualification || "N/A"} />
+                          {t.secondarySubject && <DetailTile label="Secondary subject" icon="book" value={t.secondarySubject} />}
+                          <DetailTile label="Background" icon="building" value={t.educationalBackground || "N/A"} />
+                        </div>
+                      </Collapse>
+                    </article>
+                  );
+                })}
               </div>
             )}
-          </div>
-        )}
+          </Panel>
 
-        <div className="ta-anim ta-hover-card" style={{ background: "rgba(255,255,255,0.82)", border: "1px solid rgba(255,255,255,0.65)", borderRadius: "16px", padding: "20px", boxShadow: "0 12px 28px rgba(10,22,40,0.1)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <h2 style={{ margin: 0, fontSize: "17px", color: C.navy }}>Review History (Super Admin)</h2>
-            <button
-              onClick={exportReviewedCsv}
-              disabled={!filteredReviewed.length}
-              style={{
-                border: "none",
-                background: filteredReviewed.length ? C.navy : C.mid,
-                color: C.white,
-                borderRadius: "7px",
-                padding: "7px 12px",
-                cursor: filteredReviewed.length ? "pointer" : "not-allowed",
-                fontSize: "12px",
-              }}
+          {/* Pending admin requests */}
+          {isSuperAdmin && (
+            <Panel
+              id="pending-admin-requests"
+              title="Pending admin requests"
+              subtitle="People asking for admin access to AttendX"
+              icon="shield"
+              count={loading ? undefined : pendingAdmins.length}
             >
-              Export CSV
-            </button>
-          </div>
-          {loading ? (
-            <div style={{ color: C.mid }}>Loading...</div>
-          ) : filteredReviewed.length === 0 ? (
-            <div style={{ color: C.mid, fontSize: "13px" }}>No reviewed applications found.</div>
-          ) : (
-            <div>
-              <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: C.light }}>
-                    {["Name", "Email", "Subject", "Status", "Reviewed At", "Reason"].map((h) => (
-                      <th key={h} style={{ textAlign: "left", padding: "12px", fontSize: "13px", color: C.mid }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedReviewed.map((t) => (
-                    <tr key={t._id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <td style={{ padding: "12px", fontSize: "14px", color: C.navy }}>{t.name}</td>
-                      <td style={{ padding: "12px", fontSize: "14px", color: C.mid }}>{t.email}</td>
-                      <td style={{ padding: "12px", fontSize: "14px", color: C.mid }}>{t.primarySubject || "N/A"}</td>
-                      <td style={{ padding: "12px", fontSize: "14px", color: t.approvalStatus === "approved" ? "#166534" : "#991b1b", fontWeight: 700 }}>{t.approvalStatus}</td>
-                      <td style={{ padding: "12px", fontSize: "14px", color: C.mid }}>
-                        {t.approvedAt ? new Date(t.approvedAt).toLocaleString("en-IN") : "-"}
-                      </td>
-                      <td style={{ padding: "12px", fontSize: "14px", color: C.mid }}>{t.rejectionReason || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-              <div style={{ marginTop: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: "12px", color: C.mid }}>
-                  Showing {(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredReviewed.length)} of {filteredReviewed.length}
+              {loading ? (
+                <SkeletonRows rows={2} height={76} />
+              ) : pendingAdmins.length === 0 ? (
+                <EmptyState icon="checkCircle" title="No pending admin requests" message="You're all caught up." />
+              ) : (
+                <div className="ax-stagger" style={{ display: "grid", gap: 12 }}>
+                  {pendingAdmins.map((a) => {
+                    const open = expandedAdminId === a._id;
+                    const busy = reviewingAdminId === a._id;
+                    const detailsId = `ta-admin-details-${a._id}`;
+                    return (
+                      <article key={a._id} className="ta-item" data-open={open || undefined}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            className="ta-toggle"
+                            aria-expanded={open}
+                            aria-controls={detailsId}
+                            onClick={() => setExpandedAdminId(open ? "" : a._id)}
+                          >
+                            <Avatar name={a.name} size={44} />
+                            <span style={{ minWidth: 0, textAlign: "left" }}>
+                              <span style={{ display: "block", fontWeight: 700, color: "var(--ax-text)", fontSize: 15 }}>{a.name}</span>
+                              <span style={{ display: "block", fontSize: 13, color: "var(--ax-muted)", marginTop: 2 }}>
+                                {a.department || "N/A"} · {a.designation || "N/A"}
+                              </span>
+                            </span>
+                            <Icon name="chevronDown" size={18} className="ta-chevron" style={{ color: "var(--ax-muted)", marginLeft: "auto" }} />
+                          </button>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button type="button" className="ax-btn ax-btn-success ax-btn-sm" onClick={() => onReviewAdmin(a._id, "approve")} disabled={busy}>
+                              {busy && !rejectTarget ? <span className="ax-spinner" aria-hidden="true" /> : <Icon name="check" size={14} />}
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="ax-btn ax-btn-danger ax-btn-sm"
+                              onClick={() => setRejectTarget({ type: "admin", id: a._id, name: a.name, kind: "admin request" })}
+                              disabled={busy}
+                            >
+                              <Icon name="x" size={14} /> Reject
+                            </button>
+                          </div>
+                        </div>
+                        <Collapse open={open} id={detailsId}>
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--ax-border)" }}>
+                            <DetailTile label="Email" icon="mail" value={a.email || "N/A"} />
+                            <DetailTile label="Phone" icon="phone" value={a.phone || "N/A"} />
+                            <DetailTile label="Reason" icon="info" value={a.adminAccessReason || "N/A"} />
+                          </div>
+                        </Collapse>
+                      </article>
+                    );
+                  })}
                 </div>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    style={{ border: `1px solid ${C.border}`, background: C.white, borderRadius: "6px", padding: "5px 10px", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontSize: "12px" }}
-                  >
-                    Prev
-                  </button>
-                  <span style={{ fontSize: "12px", color: C.navy }}>
-                    Page {currentPage} / {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    style={{ border: `1px solid ${C.border}`, background: C.white, borderRadius: "6px", padding: "5px 10px", cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontSize: "12px" }}
-                  >
-                    Next
-                  </button>
-                </div>
+              )}
+            </Panel>
+          )}
+
+          {/* Teacher review history */}
+          <Panel
+            title="Review history"
+            subtitle={loading ? "Approved and rejected teacher applications" : `${filteredReviewed.length} record${filteredReviewed.length === 1 ? "" : "s"}${historyFilter !== "all" ? ` · ${historyFilter}` : ""}`}
+            icon="clipboard"
+            flush
+            actions={
+              <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" onClick={exportReviewedCsv} disabled={!filteredReviewed.length}>
+                <Icon name="arrowRight" size={14} style={{ transform: "rotate(90deg)" }} /> Export CSV
+              </button>
+            }
+          >
+            {loading ? (
+              <div style={{ padding: 22 }}>
+                <SkeletonRows rows={5} />
               </div>
-            </div>
+            ) : filteredReviewed.length === 0 ? (
+              <EmptyState icon="clipboard" title="No reviewed applications found" message={search || historyFilter !== "all" ? "Try clearing the search or filter." : "Decisions you make will be recorded here."} />
+            ) : (
+              <>
+                <div className="ax-table-wrap">
+                  <table className="ax-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Teacher</th>
+                        <th scope="col">Subject</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Reviewed at</th>
+                        <th scope="col">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedReviewed.map((t) => (
+                        <tr key={t._id}>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 200 }}>
+                              <Avatar name={t.name} size={32} />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, color: "var(--ax-text)" }}>{t.name}</div>
+                                <div style={{ fontSize: 12, color: "var(--ax-muted)" }}>{t.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{t.primarySubject || "N/A"}</td>
+                          <td>
+                            <StatusBadge status={t.approvalStatus} />
+                          </td>
+                          <td style={{ whiteSpace: "nowrap" }}>{fmtDateTime(t.approvedAt)}</td>
+                          <td style={{ maxWidth: 280, color: t.rejectionReason ? "var(--ax-text-2)" : "var(--ax-muted)" }}>{t.rejectionReason || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ padding: "12px 22px", borderTop: "1px solid var(--ax-border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 13, color: "var(--ax-muted)" }}>
+                    Showing {(currentPage - 1) * rowsPerPage + 1}–{Math.min(currentPage * rowsPerPage, filteredReviewed.length)} of {filteredReviewed.length}
+                  </div>
+                  <nav aria-label="Review history pages" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} aria-label="Previous page">
+                      <Icon name="arrowLeft" size={14} /> Prev
+                    </button>
+                    <span style={{ fontSize: 13, color: "var(--ax-text-2)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} aria-label="Next page">
+                      Next <Icon name="arrowRight" size={14} />
+                    </button>
+                  </nav>
+                </div>
+              </>
+            )}
+          </Panel>
+
+          {/* Admin review history */}
+          {isSuperAdmin && (
+            <Panel title="Admin review history" subtitle="Decisions on admin access requests" icon="shield" flush>
+              {loading ? (
+                <div style={{ padding: 22 }}>
+                  <SkeletonRows rows={3} />
+                </div>
+              ) : reviewedAdmins.length === 0 ? (
+                <EmptyState icon="shield" title="No reviewed admin requests found" />
+              ) : (
+                <div className="ax-table-wrap">
+                  <table className="ax-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Admin</th>
+                        <th scope="col">Department</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Reviewed at</th>
+                        <th scope="col">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reviewedAdmins.map((a) => (
+                        <tr key={a._id}>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 200 }}>
+                              <Avatar name={a.name} size={32} />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, color: "var(--ax-text)" }}>{a.name}</div>
+                                <div style={{ fontSize: 12, color: "var(--ax-muted)" }}>{a.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{a.department || "N/A"}</td>
+                          <td>
+                            <StatusBadge status={a.adminAccessStatus} />
+                          </td>
+                          <td style={{ whiteSpace: "nowrap" }}>{fmtDateTime(a.adminApprovedAt)}</td>
+                          <td style={{ maxWidth: 280, color: a.adminRejectionReason ? "var(--ax-text-2)" : "var(--ax-muted)" }}>{a.adminRejectionReason || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
           )}
         </div>
-
-        {isSuperAdmin && (
-          <div className="ta-anim ta-hover-card" style={{ background: "rgba(255,255,255,0.82)", border: "1px solid rgba(255,255,255,0.65)", borderRadius: "14px", padding: "16px", marginTop: "20px", boxShadow: "0 12px 28px rgba(10,22,40,0.1)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}>
-            <h2 style={{ margin: "0 0 12px", fontSize: "17px", color: C.navy }}>Admin Review History (Super Admin)</h2>
-            {loading ? (
-              <div style={{ color: C.mid }}>Loading...</div>
-            ) : reviewedAdmins.length === 0 ? (
-              <div style={{ color: C.mid, fontSize: "13px" }}>No reviewed admin requests found.</div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: C.light }}>
-                      {["Name", "Email", "Department", "Status", "Reviewed At", "Reason"].map((h) => (
-                        <th key={h} style={{ textAlign: "left", padding: "10px", fontSize: "12px", color: C.mid }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reviewedAdmins.map((a) => (
-                      <tr key={a._id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: "10px", fontSize: "13px", color: C.navy }}>{a.name}</td>
-                        <td style={{ padding: "10px", fontSize: "13px", color: C.mid }}>{a.email}</td>
-                        <td style={{ padding: "10px", fontSize: "13px", color: C.mid }}>{a.department || "N/A"}</td>
-                        <td style={{ padding: "10px", fontSize: "13px", color: a.adminAccessStatus === "approved" ? "#166534" : "#991b1b", fontWeight: 700 }}>
-                          {a.adminAccessStatus}
-                        </td>
-                        <td style={{ padding: "10px", fontSize: "13px", color: C.mid }}>
-                          {a.adminApprovedAt ? new Date(a.adminApprovedAt).toLocaleString("en-IN") : "-"}
-                        </td>
-                        <td style={{ padding: "10px", fontSize: "13px", color: C.mid }}>{a.adminRejectionReason || "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
       </div>
+
+      {rejectTarget && (
+        <RejectDialog
+          key={rejectTarget.id}
+          target={rejectTarget}
+          busy={rejectBusy}
+          onCancel={closeReject}
+          onConfirm={(reason) =>
+            rejectTarget.type === "teacher" ? onReview(rejectTarget.id, "reject", reason) : onReviewAdmin(rejectTarget.id, "reject", reason)
+          }
+        />
+      )}
+
       <style>{`
-        .ta-hover-card { transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
-        .ta-hover-card:hover { transform: translateY(-4px); box-shadow: 0 22px 38px rgba(10,22,40,.16); border-color: #93c5fd; }
-        @media (max-width: 900px) {
-          .ta-search-row { flex-direction: column; }
+        .ta-item {
+          border: 1px solid var(--ax-border); background: var(--ax-surface-2);
+          border-radius: 14px; padding: 14px 16px;
+          transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
         }
+        .ta-item:hover { border-color: var(--ax-border-strong); background: var(--ax-surface); box-shadow: var(--ax-shadow); }
+        .ta-item[data-open] { background: var(--ax-surface); border-color: var(--ax-border-strong); }
+        .ta-toggle {
+          display: flex; align-items: center; gap: 12px; flex: 1 1 260px; min-width: 0;
+          background: none; border: 0; padding: 4px; margin: -4px; border-radius: 10px;
+          font: inherit; color: inherit; cursor: pointer;
+        }
+        .ta-chevron { transition: transform .25s var(--ax-ease); }
+        .ta-toggle[aria-expanded="true"] .ta-chevron { transform: rotate(180deg); }
       `}</style>
     </div>
   );

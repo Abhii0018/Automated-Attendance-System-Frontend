@@ -1,270 +1,673 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { gsap } from "gsap";
 import studentService from "../../services/studentService";
 import StudentCard from "../../components/StudentCard";
-import Loader from "../../components/Loader";
-import { SECTIONS } from "../../utils/constants";
+import useToast from "../../hooks/useToast";
+import { ATTENDANCE_THRESHOLD, SECTIONS } from "../../utils/constants";
+import { Alert, Avatar, EmptyState, Icon, PageHeader, ProgressBar, Skeleton, StatCard } from "../../components/ui";
 
-const StudentsList = () => {
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [sectionSearch, setSectionSearch] = useState("");
-  const [regSearch, setRegSearch] = useState("");
-  const [selectedSection, setSelectedSection] = useState("");
-  const [error, setError] = useState("");
+const UNASSIGNED = "UNASSIGNED";
+const PAGE_SIZE = { table: 15, grid: 12 };
+const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
+
+const sectionOf = (s) => String(s.section || "").trim().toUpperCase() || UNASSIGNED;
+const rollOf = (s) => s.classRollNumber ?? s.rollNumber ?? null;
+const pctOf = (s) => (typeof s.attendancePercentage === "number" ? s.attendancePercentage : null);
+
+const SORTERS = {
+  name: (s) => String(s.name || "").toLowerCase(),
+  registrationNumber: (s) => String(s.registrationNumber || "").toLowerCase(),
+  section: (s) => sectionOf(s),
+  roll: (s) => rollOf(s) ?? Number.MAX_SAFE_INTEGER,
+  attendance: (s) => pctOf(s) ?? -1,
+};
+
+// Highlights the part of `text` that matches the search query.
+const Highlight = ({ text, query }) => {
+  const value = String(text ?? "");
+  const q = query.trim();
+  if (!q) return value;
+  const i = value.toLowerCase().indexOf(q.toLowerCase());
+  if (i === -1) return value;
+  return (
+    <>
+      {value.slice(0, i)}
+      <mark style={{ background: "var(--ax-gold-soft)", color: "inherit", borderRadius: 3, padding: "0 1px" }}>
+        {value.slice(i, i + q.length)}
+      </mark>
+      {value.slice(i + q.length)}
+    </>
+  );
+};
+
+// Minimal accessible modal dialog.
+const Dialog = ({ title, children, onClose, footer }) => {
+  const panelRef = useRef(null);
+  const closeRef = useRef(onClose);
 
   useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const res = await studentService.getAllStudents();
-        setStudents(res.data || res.students || []);
-      } catch (err) {
-        setError(err.response?.data?.message || "Failed to load students.");
-        setStudents([]);
-      } finally {
-        setLoading(false);
-      }
+    closeRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") closeRef.current();
     };
+    document.addEventListener("keydown", onKey);
+    const first = panelRef.current?.querySelector("input, button:not([data-close])");
+    first?.focus();
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  return (
+    <div
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(11, 21, 48, 0.45)", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="students-dialog-title"
+        className="ax-card ax-fade-up"
+        style={{ width: "min(440px, 100%)", padding: 22, boxShadow: "var(--ax-shadow-lg)" }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <h2 id="students-dialog-title" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--ax-text)" }}>
+            {title}
+          </h2>
+          <button type="button" data-close className="ax-btn ax-btn-ghost ax-btn-sm" onClick={onClose} aria-label="Close dialog">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        {children}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20, flexWrap: "wrap" }}>{footer}</div>
+      </div>
+    </div>
+  );
+};
+
+const SortHeader = ({ label, sortKey, sort, onSort, style }) => {
+  const active = sort.key === sortKey;
+  return (
+    <th scope="col" aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"} style={style}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        style={{ all: "unset", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, color: active ? "var(--ax-text)" : "inherit" }}
+      >
+        {label}
+        <span aria-hidden="true" style={{ display: "inline-flex", opacity: active ? 1 : 0.35, transform: active && sort.dir === "asc" ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+          <Icon name="chevronDown" size={13} />
+        </span>
+      </button>
+    </th>
+  );
+};
+
+const StudentsList = () => {
+  const toast = useToast();
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedSection, setSelectedSection] = useState("");
+  const [view, setView] = useState(() => {
+    try {
+      return window.matchMedia("(max-width: 640px)").matches ? "grid" : "table";
+    } catch {
+      return "table";
+    }
+  });
+  const [sort, setSort] = useState({ key: "name", dir: "asc" });
+  const [page, setPage] = useState(1);
+  const [dialog, setDialog] = useState(null); // { type: "delete" | "link", student }
+  const [linkEmail, setLinkEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const fetchStudents = async () => {
+    try {
+      const res = await studentService.getAllStudents();
+      setStudents(res.data || res.students || []);
+      setError("");
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load students.");
+      setStudents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchStudents();
   }, []);
 
-  useEffect(() => {
-    if (!loading) {
-      const hasCards = document.querySelectorAll(".student-card-item, .section-card-item").length > 0;
-      if (!hasCards) return;
-      gsap.fromTo(
-        ".section-card-item, .student-card-item",
-        { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, stagger: 0.06, duration: 0.45, ease: "power3.out" }
-      );
-    }
-  }, [loading, sectionSearch, selectedSection, regSearch]);
+  const retry = () => {
+    setLoading(true);
+    setError("");
+    fetchStudents();
+  };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this student?")) return;
+  // ── Actions ─────────────────────────────────────────────────────────────
+  const handleDelete = (id) => {
+    const student = students.find((s) => s._id === id);
+    if (student) setDialog({ type: "delete", student });
+  };
+
+  const confirmDelete = async () => {
+    const { student } = dialog;
+    setBusy(true);
     try {
-      await studentService.deleteStudent(id);
-      setStudents((prev) => prev.filter((s) => s._id !== id));
+      await studentService.deleteStudent(student._id);
+      setStudents((prev) => prev.filter((s) => s._id !== student._id));
+      toast.success(`${student.name} was deleted.`);
+      setDialog(null);
     } catch {
-      alert("Failed to delete student.");
+      toast.error("Failed to delete student.");
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleLinkUser = async (student) => {
-    const email = window.prompt(`Enter verified student account email for ${student.name}:`);
+  const handleLinkUser = (student) => {
+    setLinkEmail("");
+    setDialog({ type: "link", student });
+  };
+
+  const confirmLink = async (e) => {
+    e.preventDefault();
+    const email = linkEmail.trim();
     if (!email) return;
+    setBusy(true);
     try {
-      await studentService.linkStudentUser(student._id, email.trim());
+      await studentService.linkStudentUser(dialog.student._id, email);
       const res = await studentService.getAllStudents();
       setStudents(res.data || res.students || []);
-      alert("Student linked successfully.");
+      toast.success("Student linked successfully.");
+      setDialog(null);
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to link student.");
+      toast.error(err.response?.data?.message || "Failed to link student.");
+    } finally {
+      setBusy(false);
     }
   };
 
-  const sectionMap = students.reduce((acc, s) => {
-    const section = (s.section || "UNASSIGNED").toUpperCase();
-    acc[section] = (acc[section] || 0) + 1;
-    return acc;
-  }, {});
+  const closeDialog = () => {
+    if (!busy) setDialog(null);
+  };
 
-  const dynamicSections = Object.entries(sectionMap)
-    .map(([section, count]) => ({ section, count }))
-    .sort((a, b) => a.section.localeCompare(b.section));
+  // ── Derived data ────────────────────────────────────────────────────────
+  const sectionCounts = useMemo(() => {
+    const map = {};
+    SECTIONS.forEach((s) => (map[s] = 0));
+    students.forEach((s) => {
+      const key = sectionOf(s);
+      map[key] = (map[key] || 0) + 1;
+    });
+    return Object.entries(map)
+      .map(([section, count]) => ({ section, count }))
+      .sort((a, b) => (a.section === UNASSIGNED ? 1 : b.section === UNASSIGNED ? -1 : a.section.localeCompare(b.section)));
+  }, [students]);
 
-  const allSections = SECTIONS.map((section) => {
-    const found = dynamicSections.find((s) => s.section === section);
-    return found || { section, count: 0 };
-  });
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const rows = students.filter((s) => {
+      if (selectedSection && sectionOf(s) !== selectedSection) return false;
+      if (!q) return true;
+      return [s.name, s.registrationNumber, rollOf(s)].some((v) => String(v ?? "").toLowerCase().includes(q));
+    });
+    const get = SORTERS[sort.key];
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = get(a);
+      const bv = get(b);
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  }, [students, query, selectedSection, sort]);
 
-  const visibleSections = allSections.filter((s) =>
-    s.section.toLowerCase().includes(sectionSearch.toLowerCase())
-  );
+  const pageSize = PAGE_SIZE[view];
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const sectionStudents = selectedSection
-    ? students.filter((s) => String(s.section || "").trim().toUpperCase() === selectedSection)
-    : [];
+  const linkedCount = students.filter((s) => s.userId).length;
+  const unassignedCount = students.filter((s) => sectionOf(s) === UNASSIGNED).length;
+  const activeSections = sectionCounts.filter((s) => s.section !== UNASSIGNED && s.count > 0).length;
 
-  const registrationResults = regSearch.trim()
-    ? students.filter((s) => {
-        const reg = (s.registrationNumber || "").toLowerCase();
-        return reg.includes(regSearch.trim().toLowerCase());
-      })
-    : [];
+  const onSort = (key) => {
+    setSort((prev) => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "attendance" ? "desc" : "asc" }));
+    setPage(1);
+  };
 
-  if (loading) return <Loader fullScreen />;
+  const pickSection = (section) => {
+    setSelectedSection(section);
+    setPage(1);
+  };
+
+  const sectionLabel = (s) => (s === UNASSIGNED ? "Unassigned" : s);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_15%,#dbeafe_0%,#f4f6fa_38%,#eef2ff_100%)] pt-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <div className="ax-page">
+      <div className="ax-container">
+        <PageHeader
+          eyebrow="Admin · Students"
+          title="Students"
+          subtitle="Search, filter and manage every enrolled student."
+          actions={
+            <Link to="/admin/create-student" className="ax-btn ax-btn-primary">
+              <Icon name="userPlus" size={16} /> Add student
+            </Link>
+          }
+        />
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
-            <p className="text-blue-700 text-xs font-semibold uppercase tracking-[0.2em] mb-1">
-              Admin
-            </p>
-            <h1 className="font-bold text-3xl text-slate-900">Students</h1>
-            <p className="text-slate-500 text-sm mt-1">Browse by section or search by registration number</p>
-          </div>
-          <Link
-            to="/admin/create-student"
-            className="self-start flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-slate-900 to-slate-700 hover:from-slate-800 hover:to-slate-600 text-white font-semibold text-sm transition-all duration-200 shadow-[0_10px_20px_rgba(10,22,40,0.18)] hover:-translate-y-0.5"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Student
-          </Link>
+        {/* KPIs */}
+        <div className="ax-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, marginBottom: 22 }}>
+          <StatCard label="Total students" value={students.length} icon="users" tone="navy" loading={loading} />
+          <StatCard label="Active sections" value={activeSections} icon="layers" tone="blue" loading={loading} />
+          <StatCard
+            label="Linked logins"
+            value={linkedCount}
+            icon="key"
+            tone="gold"
+            loading={loading}
+            hint={!loading && students.length ? `${Math.round((linkedCount / students.length) * 100)}% have a student account` : undefined}
+          />
+          <StatCard label="Unassigned" value={unassignedCount} icon="alert" tone={unassignedCount ? "warning" : "success"} loading={loading} hint="Students without a section" />
         </div>
-
-        {/* Filters */}
-        <div className="grid md:grid-cols-2 gap-3 mb-6">
-          <div className="relative flex-1">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              className="w-full bg-white/80 backdrop-blur-md border border-white/60 focus:border-blue-300 text-slate-900 placeholder-slate-500 rounded-xl pl-10 pr-4 py-3 outline-none transition-all duration-200 text-sm shadow-[0_8px_20px_rgba(10,22,40,0.08)]"
-              placeholder="Search section (A, B, C...)"
-              value={sectionSearch}
-              onChange={(e) => setSectionSearch(e.target.value)}
-            />
-          </div>
-          <div className="relative flex-1">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l6 6M4 11a7 7 0 1114 0A7 7 0 014 11z" />
-            </svg>
-            <input
-              className="w-full bg-white/80 backdrop-blur-md border border-white/60 focus:border-blue-300 text-slate-900 placeholder-slate-500 rounded-xl pl-10 pr-4 py-3 outline-none transition-all duration-200 text-sm shadow-[0_8px_20px_rgba(10,22,40,0.08)]"
-              placeholder="Search student by registration number..."
-              value={regSearch}
-              onChange={(e) => setRegSearch(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* Section chips/cards */}
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-slate-900 font-semibold text-lg">All Sections</h2>
-            <span className="text-xs text-slate-500">
-              {allSections.length} section{allSections.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-          <div className="mb-3 text-xs text-slate-600 bg-white/70 border border-white/60 rounded-xl px-3 py-2">
-            Auto policy: first 20 students go to PA, then new admissions are balanced between PA and PB.
-          </div>
-          {visibleSections.length === 0 ? (
-            <div className="text-sm text-slate-500 bg-white/70 border border-white/60 rounded-xl px-4 py-3">
-              No section matches your search.
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {visibleSections.map((item) => {
-                const active = selectedSection === item.section;
-                return (
-                  <button
-                    key={item.section}
-                    onClick={() => setSelectedSection(item.section)}
-                    className={`section-card-item opacity-0 text-left rounded-xl px-4 py-3 border transition-all ${
-                      active
-                        ? "bg-blue-600 text-white border-blue-600 shadow-[0_10px_20px_rgba(37,99,235,0.35)]"
-                        : "bg-white/80 border-white/60 hover:border-blue-300 text-slate-800 shadow-[0_8px_20px_rgba(10,22,40,0.08)]"
-                    }`}
-                  >
-                    <div className="text-xs uppercase tracking-wide opacity-80">Section</div>
-                    <div className="font-bold text-xl leading-tight mt-1">{item.section}</div>
-                    <div className={`text-xs mt-1 ${active ? "text-blue-100" : "text-slate-500"}`}>
-                      {item.count} student{item.count !== 1 ? "s" : ""}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {!!regSearch.trim() && (
-          <div className="mb-6 bg-white/80 border border-white/60 rounded-2xl p-4 backdrop-blur-md shadow-[0_10px_24px_rgba(10,22,40,0.09)]">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900 text-sm">Registration Search Result</h3>
-              <span className="text-xs text-slate-500">
-                {registrationResults.length} match{registrationResults.length !== 1 ? "es" : ""}
-              </span>
-            </div>
-            {registrationResults.length === 0 ? (
-              <p className="text-sm text-slate-500">No student found for this registration number.</p>
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {registrationResults.slice(0, 9).map((student) => (
-                  <div key={`reg-${student._id}`} className="student-card-item opacity-0 will-change-transform">
-                    <StudentCard student={student} onDelete={handleDelete} onLinkUser={handleLinkUser} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {error && (
-          <div className="mb-5 text-sm text-rose-400">{error}</div>
-        )}
-
-        {/* Section students */}
-        {!selectedSection ? (
-          <div className="bg-white/80 border border-white/60 rounded-2xl flex flex-col items-center py-16 text-center backdrop-blur-md shadow-[0_12px_28px_rgba(10,22,40,0.10)]">
-            <p className="text-slate-700 text-sm font-semibold">Select a section to view students</p>
-            <p className="text-slate-500 text-xs mt-2">This keeps records section-focused instead of one long list.</p>
-          </div>
-        ) : sectionStudents.length === 0 ? (
-          <div className="bg-white/80 border border-white/60 rounded-2xl flex flex-col items-center py-16 text-center backdrop-blur-md shadow-[0_12px_28px_rgba(10,22,40,0.10)]">
-            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-              <svg className="w-7 h-7 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-            </div>
-            <p className="text-slate-600 text-sm">No students found in Section {selectedSection}.</p>
-          </div>
-        ) : (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-900 text-lg">Section {selectedSection} Students</h3>
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                  {sectionStudents.length} student{sectionStudents.length !== 1 ? "s" : ""}
-                </span>
-                <button
-                  onClick={() => setSelectedSection("")}
-                  className="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
-                >
-                  Clear Section
+          <div style={{ marginBottom: 18 }}>
+            <Alert tone="danger" title="Couldn't load students">
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "space-between" }}>
+                <span>{error}</span>
+                <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" onClick={retry}>
+                  <Icon name="refresh" size={14} /> Retry
                 </button>
               </div>
+            </Alert>
+          </div>
+        )}
+
+        {/* Toolbar */}
+        <div className="ax-card ax-fade-up" style={{ padding: 16, marginBottom: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ position: "relative", flex: "1 1 260px", minWidth: 0 }}>
+              <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--ax-muted)", display: "flex" }}>
+                <Icon name="search" size={16} />
+              </span>
+              <label htmlFor="student-search" className="sr-only">
+                Search students
+              </label>
+              <input
+                id="student-search"
+                type="search"
+                className="ax-input"
+                style={{ paddingLeft: 38, paddingRight: query ? 38 : undefined }}
+                placeholder="Search by name, registration or roll number…"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
+                autoComplete="off"
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="ax-btn ax-btn-ghost ax-btn-sm"
+                  onClick={() => {
+                    setQuery("");
+                    setPage(1);
+                  }}
+                  aria-label="Clear search"
+                  style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", height: 30, padding: "0 8px" }}
+                >
+                  <Icon name="x" size={14} />
+                </button>
+              )}
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sectionStudents.map((student) => (
-              <div key={student._id} className="student-card-item opacity-0 will-change-transform">
-                <StudentCard student={student} onDelete={handleDelete} onLinkUser={handleLinkUser} />
+
+            <div role="group" aria-label="View" style={{ display: "inline-flex", padding: 3, borderRadius: 10, background: "var(--ax-surface-2)", border: "1px solid var(--ax-border)" }}>
+              {[
+                { key: "table", label: "Table", icon: "menu" },
+                { key: "grid", label: "Cards", icon: "dashboard" },
+              ].map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  aria-pressed={view === v.key}
+                  onClick={() => {
+                    setView(v.key);
+                    setPage(1);
+                  }}
+                  className="ax-btn ax-btn-sm"
+                  style={{
+                    height: 30,
+                    background: view === v.key ? "var(--ax-surface)" : "transparent",
+                    boxShadow: view === v.key ? "var(--ax-shadow-sm)" : "none",
+                    borderColor: view === v.key ? "var(--ax-border)" : "transparent",
+                    color: view === v.key ? "var(--ax-text)" : "var(--ax-muted)",
+                  }}
+                >
+                  <Icon name={v.icon} size={14} /> {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }} role="group" aria-label="Filter by section">
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ax-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginRight: 4 }}>Section</span>
+            {[{ section: "", count: students.length }, ...sectionCounts].map((item) => {
+              const active = selectedSection === item.section;
+              return (
+                <button
+                  key={item.section || "all"}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => pickSection(item.section)}
+                  disabled={loading}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 32,
+                    padding: "0 12px",
+                    borderRadius: 999,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: `1px solid ${active ? "var(--ax-navy)" : "var(--ax-border)"}`,
+                    background: active ? "var(--ax-navy)" : "var(--ax-surface)",
+                    color: active ? "#fff" : "var(--ax-text-2)",
+                    transition: "all 0.18s ease",
+                  }}
+                >
+                  {item.section ? sectionLabel(item.section) : "All"}
+                  <span
+                    style={{
+                      fontSize: 11,
+                      padding: "1px 7px",
+                      borderRadius: 999,
+                      background: active ? "rgba(255,255,255,0.16)" : "var(--ax-surface-2)",
+                      color: active ? "var(--ax-gold-2)" : "var(--ax-muted)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {loading ? "…" : item.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 13, color: "var(--ax-muted)" }}>
+            <span aria-live="polite">
+              {loading ? (
+                "Loading students…"
+              ) : (
+                <>
+                  <strong style={{ color: "var(--ax-text)" }}>{filtered.length}</strong> of {students.length} student{students.length !== 1 ? "s" : ""}
+                  {selectedSection && ` in ${selectedSection === UNASSIGNED ? "no section" : `section ${selectedSection}`}`}
+                  {query.trim() && ` matching “${query.trim()}”`}
+                </>
+              )}
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icon name="info" size={13} /> Auto policy: first 20 students go to PA, then new admissions are balanced between PA and PB.
+            </span>
+          </div>
+        </div>
+
+        {/* Results */}
+        {loading ? (
+          <div className="ax-card" style={{ padding: 16 }} aria-busy="true">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < 7 ? "1px solid var(--ax-border)" : "none" }}>
+                <Skeleton width={36} height={36} radius={11} />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <Skeleton height={12} width="35%" />
+                  <Skeleton height={10} width="20%" />
+                </div>
+                <Skeleton height={10} width="18%" />
               </div>
             ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="ax-card">
+            <EmptyState
+              icon={students.length ? "search" : "users"}
+              title={students.length ? "No students match your filters" : "No students yet"}
+              message={
+                students.length
+                  ? "Try a different name, registration number or section."
+                  : error
+                  ? "The student list could not be loaded."
+                  : "Add your first student to get started."
+              }
+              action={
+                students.length ? (
+                  <button
+                    type="button"
+                    className="ax-btn ax-btn-secondary ax-btn-sm"
+                    onClick={() => {
+                      setQuery("");
+                      pickSection("");
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  !error && (
+                    <Link to="/admin/create-student" className="ax-btn ax-btn-primary ax-btn-sm">
+                      <Icon name="userPlus" size={14} /> Add student
+                    </Link>
+                  )
+                )
+              }
+            />
+          </div>
+        ) : view === "grid" ? (
+          <div key={`grid-${currentPage}-${selectedSection}`} className="ax-stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
+            {pageRows.map((student) => (
+              <StudentCard key={student._id} student={student} onDelete={handleDelete} onLinkUser={handleLinkUser} />
+            ))}
+          </div>
+        ) : (
+          <div className="ax-card ax-fade-up" style={{ overflow: "hidden" }}>
+            <div className="ax-table-wrap">
+              <table className="ax-table">
+                <thead>
+                  <tr>
+                    <SortHeader label="Student" sortKey="name" sort={sort} onSort={onSort} />
+                    <SortHeader label="Registration no." sortKey="registrationNumber" sort={sort} onSort={onSort} />
+                    <SortHeader label="Section" sortKey="section" sort={sort} onSort={onSort} />
+                    <SortHeader label="Roll" sortKey="roll" sort={sort} onSort={onSort} />
+                    <SortHeader label="Attendance" sortKey="attendance" sort={sort} onSort={onSort} />
+                    <th scope="col">Login</th>
+                    <th scope="col" style={{ textAlign: "right" }}>
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((s) => {
+                    const pct = pctOf(s);
+                    const low = pct !== null && pct < ATTENDANCE_THRESHOLD;
+                    const section = sectionOf(s);
+                    return (
+                      <tr key={s._id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 190 }}>
+                            <Avatar name={s.name} size={34} />
+                            <div style={{ minWidth: 0 }}>
+                              <Link
+                                to={`/admin/students/${s._id}/analytics`}
+                                className="hover:underline"
+                                style={{ fontWeight: 600, color: "var(--ax-text)", textDecoration: "none" }}
+                              >
+                                <Highlight text={s.name} query={query} />
+                              </Link>
+                              <div style={{ fontSize: 12, color: "var(--ax-muted)" }}>
+                                {[s.department, s.admissionYear && `Batch ${s.admissionYear}`].filter(Boolean).join(" · ") || "—"}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ fontFamily: MONO, fontSize: 13, whiteSpace: "nowrap" }}>
+                          <Highlight text={s.registrationNumber || "—"} query={query} />
+                        </td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          {section === UNASSIGNED ? (
+                            <span className="ax-badge ax-badge-warning">Unassigned</span>
+                          ) : (
+                            <span className="ax-badge ax-badge-info">
+                              {section}
+                              {s.semester != null && <span style={{ opacity: 0.7 }}>· S{s.semester}</span>}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ fontVariantNumeric: "tabular-nums" }}>{rollOf(s) != null ? <Highlight text={rollOf(s)} query={query} /> : "—"}</td>
+                        <td style={{ minWidth: 150 }}>
+                          {pct === null ? (
+                            <span style={{ fontSize: 12, color: "var(--ax-muted)" }}>No data</span>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <div style={{ flex: 1 }}>
+                                <ProgressBar value={pct} threshold={ATTENDANCE_THRESHOLD} />
+                              </div>
+                              <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: low ? "var(--ax-danger)" : "var(--ax-text)" }}>{pct}%</span>
+                              {low && <span className="ax-badge ax-badge-danger">Low</span>}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          {s.userId ? (
+                            <span className="ax-badge ax-badge-success">
+                              <Icon name="check" size={11} /> Linked
+                            </span>
+                          ) : (
+                            <button type="button" className="ax-btn ax-btn-ghost ax-btn-sm" onClick={() => handleLinkUser(s)} style={{ color: "var(--ax-blue)" }}>
+                              <Icon name="key" size={13} /> Link
+                            </button>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                            <Link to={`/admin/students/${s._id}/analytics`} className="ax-btn ax-btn-secondary ax-btn-sm" aria-label={`View analytics for ${s.name}`}>
+                              <Icon name="chart" size={14} />
+                              <span className="hidden lg:inline">Analytics</span>
+                            </Link>
+                            <button type="button" className="ax-btn ax-btn-danger ax-btn-sm" onClick={() => handleDelete(s._id)} aria-label={`Delete ${s.name}`} title="Delete student">
+                              <Icon name="x" size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
+        {/* Pagination */}
+        {!loading && filtered.length > pageSize && (
+          <nav aria-label="Pagination" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
+            <span style={{ fontSize: 13, color: "var(--ax-muted)" }}>
+              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length}
+            </span>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} aria-label="Previous page">
+                <Icon name="arrowLeft" size={14} />
+              </button>
+              {Array.from({ length: pageCount }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === pageCount || Math.abs(p - currentPage) <= 1)
+                .map((p, i, arr) => (
+                  <span key={p} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    {i > 0 && p - arr[i - 1] > 1 && <span style={{ color: "var(--ax-muted)" }}>…</span>}
+                    <button
+                      type="button"
+                      aria-current={p === currentPage ? "page" : undefined}
+                      onClick={() => setPage(p)}
+                      className={`ax-btn ax-btn-sm ${p === currentPage ? "ax-btn-primary" : "ax-btn-ghost"}`}
+                      style={{ minWidth: 32, padding: "0 8px" }}
+                    >
+                      {p}
+                    </button>
+                  </span>
+                ))}
+              <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)} aria-label="Next page">
+                <Icon name="arrowRight" size={14} />
+              </button>
+            </div>
+          </nav>
+        )}
       </div>
+
+      {dialog?.type === "delete" && (
+        <Dialog
+          title="Delete student?"
+          onClose={closeDialog}
+          footer={
+            <>
+              <button type="button" className="ax-btn ax-btn-secondary" onClick={closeDialog} disabled={busy}>
+                Cancel
+              </button>
+              <button type="button" className="ax-btn ax-btn-danger" onClick={confirmDelete} disabled={busy} style={{ borderColor: "var(--ax-danger)" }}>
+                {busy ? <span className="ax-spinner" /> : <Icon name="x" size={14} />} Delete
+              </button>
+            </>
+          }
+        >
+          <div style={{ display: "flex", gap: 12, alignItems: "center", padding: 12, borderRadius: 12, background: "var(--ax-surface-2)", border: "1px solid var(--ax-border)" }}>
+            <Avatar name={dialog.student.name} size={40} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, color: "var(--ax-text)" }}>{dialog.student.name}</div>
+              <div style={{ fontSize: 12.5, color: "var(--ax-muted)", fontFamily: MONO }}>{dialog.student.registrationNumber}</div>
+            </div>
+          </div>
+          <p style={{ fontSize: 14, color: "var(--ax-text-2)", margin: "14px 0 0" }}>Are you sure you want to delete this student? This cannot be undone.</p>
+        </Dialog>
+      )}
+
+      {dialog?.type === "link" && (
+        <Dialog
+          title="Link student login"
+          onClose={closeDialog}
+          footer={
+            <>
+              <button type="button" className="ax-btn ax-btn-secondary" onClick={closeDialog} disabled={busy}>
+                Cancel
+              </button>
+              <button type="submit" form="link-user-form" className="ax-btn ax-btn-primary" disabled={busy || !linkEmail.trim()}>
+                {busy ? <span className="ax-spinner" /> : <Icon name="key" size={14} />} Link account
+              </button>
+            </>
+          }
+        >
+          <form id="link-user-form" onSubmit={confirmLink}>
+            <label htmlFor="link-email" className="ax-label">
+              Verified student account email for {dialog.student.name}
+            </label>
+            <input
+              id="link-email"
+              type="email"
+              className="ax-input"
+              placeholder="student@example.com"
+              value={linkEmail}
+              onChange={(e) => setLinkEmail(e.target.value)}
+              required
+              autoComplete="off"
+            />
+            <p className="ax-help" style={{ marginTop: 8 }}>
+              The account must already be registered and verified as a student.
+            </p>
+          </form>
+        </Dialog>
+      )}
     </div>
   );
 };

@@ -1,848 +1,997 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { gsap } from "gsap";
 import useAuth from "../hooks/useAuth";
-import { ROLE_REDIRECTS } from "../utils/constants";
+import useToast from "../hooks/useToast";
+import { ROLE_REDIRECTS, ATTENDANCE_THRESHOLD } from "../utils/constants";
+import attendanceService from "../services/attendanceService";
+import { Icon, StatCard } from "../components/ui";
 
-// ─── Assets ───────────────────────────────────────────────────────────────────
-import heroBg from "../assets/college1.jpeg";
-import campusImg from "../assets/college.jpeg";
+import campusImg from "../assets/college1.jpeg";
+import teachersImg from "../assets/teachers.jpeg";
 import studentsImg from "../assets/students1.jpeg";
-import classImg from "../assets/teachers.jpeg";
-import gradImg from "../assets/students.jpeg";
+import adminImg from "../assets/college.jpeg";
 
-// ─── Responsive CSS (injected once into <head>) ────────────────────────────
-const RESPONSIVE_CSS = `
-  .land-hero      { grid-template-columns: 1fr 1fr; }
-  .land-hero-left { padding: 80px 60px 80px 80px; }
-  .land-hero-img  { min-height: 500px; }
-  .land-hamburger { display: none; flex-direction: column; gap: 5px; }
-  .land-nav-links, .land-nav-auth { display: flex; }
-  .land-two-col   { grid-template-columns: 1fr 1fr; }
-  .land-two-col-rev { grid-template-columns: 1fr 1fr; }
-  .land-stats     { grid-template-columns: repeat(4,1fr); }
-  .land-features  { grid-template-columns: repeat(3,1fr); }
-  .land-roles     { grid-template-columns: repeat(3,1fr); }
-  .land-tests     { grid-template-columns: repeat(3,1fr); }
-  .land-ftgrid    { grid-template-columns: 2fr 1fr 1fr 1fr; }
-  .land-about-badge { display: flex; }
-  @media (max-width: 900px) {
-    .land-hero      { grid-template-columns: 1fr !important; }
-    .land-hero-left { padding: 70px 28px 44px !important; }
-    .land-hero-img  { min-height: 260px !important; }
-    .land-hamburger { display: flex !important; }
-    .land-nav-links, .land-nav-auth { display: none !important; }
-    .land-two-col   { grid-template-columns: 1fr !important; gap: 36px !important; }
-    .land-two-col-rev { grid-template-columns: 1fr !important; gap: 36px !important; }
-    .land-stats     { grid-template-columns: repeat(2,1fr) !important; }
-    .land-features  { grid-template-columns: 1fr !important; }
-    .land-roles     { grid-template-columns: 1fr !important; }
-    .land-tests     { grid-template-columns: 1fr !important; }
-    .land-ftgrid    { grid-template-columns: 1fr 1fr !important; gap: 28px !important; }
-    .land-about-badge { display: none !important; }
-    .land-section   { padding: 60px 0 !important; }
-  }
-  @media (max-width: 480px) {
-    .land-stats  { grid-template-columns: 1fr 1fr !important; }
-    .land-ftgrid { grid-template-columns: 1fr !important; }
-  }
-`;
+/* ─────────────────────────────────────────────────────────────────────────────
+   Landing page — public marketing page for AttendX.
+   Everything described here is a real feature of the app. The only numbers
+   shown are live ones from GET /attendance/public/stats.
+   ──────────────────────────────────────────────────────────────────────────── */
 
-// ─── Theme Colors ─────────────────────────────────────────────────────────────
-const C = {
-  navy: "#0a1628",
-  navyMid: "#102040",
-  gold: "#c9a84c",
-  goldL: "#e8c96a",
-  white: "#ffffff",
-  light: "#f4f6fa",
-  mid: "#6b7280",
-  border: "#dde3ef",
-};
-
-// ─── Data ─────────────────────────────────────────────────────────────────────
 const NAV_LINKS = [
-  { label: "About", href: "about" },
-  { label: "Features", href: "features" },
-  { label: "Portals", href: "programs" },
-  { label: "Contact", href: "contact" },
-];
-
-const STATS = [
-  { value: "10,000+", label: "Active Student Records" },
-  { value: "500+", label: "Faculty Members Onboarded" },
-  { value: "98%", label: "Attendance Data Accuracy" },
-  { value: "50+", label: "Departments and Programs" },
+  { id: "features", label: "Features" },
+  { id: "how-it-works", label: "How it works" },
+  { id: "roles", label: "Portals" },
+  { id: "alerts", label: "AI & alerts" },
 ];
 
 const FEATURES = [
-  { icon: "RT", title: "Live Attendance Monitoring", tag: "Real-time Data", desc: "Track each lecture and section instantly with no manual sync delays." },
-  { icon: "RB", title: "Role-Specific Workspaces", tag: "Focused Experience", desc: "Admins, teachers, and students each get a clean workflow built for their daily tasks." },
-  { icon: "AL", title: "Early Attendance Alerts", tag: "Risk Prevention", desc: "Warn students and mentors early before attendance crosses critical thresholds." },
-  { icon: "RP", title: "Actionable Academic Reports", tag: "Insights", desc: "Generate subject-wise and section-wise reports quickly with date-range filters." },
-  { icon: "SC", title: "Secure By Design", tag: "Protected Records", desc: "Use trusted access control and secure architecture for reliable academic data." },
-  { icon: "SP", title: "Fast Daily Workflow", tag: "High Productivity", desc: "Mark and verify attendance within seconds, even for large classrooms." },
+  { icon: "clipboard", title: "Period-wise attendance", text: "Teachers mark each period for a section and subject — every student is simply Present or Absent." },
+  { icon: "calendar", title: "Timetable-based classes", text: "Classes come from the section timetable, so a teacher sees exactly which periods they have today." },
+  { icon: "clock", title: "Teacher check-in / check-out", text: "Faculty record their own day with a one-tap check-in and check-out from the teacher dashboard." },
+  { icon: "userPlus", title: "Admissions & student records", text: "Admins take admissions, create student records and assign each student to a semester and section." },
+  { icon: "bar", title: "Section reports & analytics", text: "Section-wise attendance reports plus per-student analytics broken down by subject." },
+  { icon: "alert", title: "75% threshold warnings", text: "Anyone under 75% attendance is flagged, both for the student and in the admin's low-attendance list." },
+  { icon: "mail", title: "Daily parent emails", text: "At 6 PM, parents of absent students automatically get a summary of missed periods and overall %." },
+  { icon: "sparkles", title: "AI attendance tips", text: "Claude gives each student a personal tip, including exactly how many classes they need to reach 75%." },
+];
+
+const STEPS = [
+  { icon: "building", title: "Admin sets up the college", text: "Admissions, student records, sections and the timetable. The super admin approves teacher applications." },
+  { icon: "login", title: "Teacher checks in", text: "An approved teacher signs in, checks in for the day and opens today's timetable classes." },
+  { icon: "clipboard", title: "Attendance is marked", text: "For each period, the teacher marks the section Present / Absent and submits — records update instantly." },
+  { icon: "bell", title: "Everyone stays informed", text: "Students see their % and AI tips, admins see reports, and parents get a daily email at 6 PM." },
 ];
 
 const ROLES = [
   {
-    role: "Administrator", icon: "AD",
-    perks: ["Manage all student accounts", "Institution-wide analytics", "Monitor low-attendance students", "Section & subject reports"],
+    id: "admin",
+    label: "Admin / Super Admin",
+    plural: "admins",
+    icon: "shield",
+    image: adminImg,
+    alt: "College campus building",
+    summary: "Runs the institution's records and keeps an eye on attendance across every section.",
+    points: [
+      "Take admissions and create student records",
+      "Assign students to semesters and sections",
+      "Manage teachers and timetable slots",
+      "Super admin approves or rejects teacher applications",
+      "Section-wise attendance reports by date and subject",
+      "Per-student analytics and the below-75% list",
+    ],
   },
   {
-    role: "Teacher", icon: "TC",
-    perks: ["Mark attendance by section & subject", "Track present / absent / late", "View class-level summaries", "Filter by date range"],
+    id: "teacher",
+    label: "Teacher",
+    plural: "teachers",
+    icon: "teacher",
+    image: teachersImg,
+    alt: "Teachers at the college",
+    summary: "Gets a focused workspace for the day's classes — no paper registers.",
+    points: [
+      "Apply through registration, then get approved",
+      "Check in and check out each working day",
+      "See today's classes from the timetable",
+      "Mark attendance period-by-period, per section and subject",
+      "Present / Absent for every student in one screen",
+      "Review an overview of classes already recorded",
+    ],
   },
   {
-    role: "Student", icon: "ST",
-    perks: ["Check personal attendance %", "Subject-wise breakdowns", "Receive low-attendance warnings", "Manage personal profile"],
+    id: "student",
+    label: "Student",
+    plural: "students",
+    icon: "user",
+    image: studentsImg,
+    alt: "Students on campus",
+    summary: "Always knows where they stand, and what to do about it.",
+    points: [
+      "Overall and subject-wise attendance percentage",
+      "Clear warning when attendance falls below 75%",
+      "AI tip with the exact number of classes needed to reach 75%",
+      "Attendance history for each subject",
+      "Personal profile with section and semester details",
+      "Email OTP verification when creating an account",
+    ],
   },
 ];
 
-const TESTIMONIALS = [
-  { name: "Dr. Priya Sharma", role: "Head of Computer Science", quote: "Attendance audits and departmental reports are now available instantly, which has improved our planning cycle." },
-  { name: "Rahul Mehta", role: "Student, B.Tech CSE", quote: "I always know my subject-wise attendance and receive alerts early, so I can improve before it becomes risky." },
-  { name: "Prof. Anjali Singh", role: "Senior Faculty", quote: "The workflow is quick and reliable. I spend less time on registers and more time with students." },
+const SAMPLE_STUDENTS = [
+  { roll: "PA-01", name: "Aarav Kumar" },
+  { roll: "PA-02", name: "Diya Patel" },
+  { roll: "PA-03", name: "Kabir Singh" },
+  { roll: "PA-04", name: "Meera Iyer" },
+  { roll: "PA-05", name: "Rohan Das" },
 ];
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const PAGE_CSS = `
+.lp { background: var(--ax-bg); color: var(--ax-text); overflow-x: clip; }
+.lp section[id] { scroll-margin-top: 72px; }
+.lp-wrap { width: min(1200px, 100%); margin: 0 auto; padding: 0 24px; }
+@media (max-width: 640px) { .lp-wrap { padding: 0 16px; } }
+
+/* top bar */
+.lp-bar { position: fixed; inset: 0 0 auto 0; z-index: 60; height: var(--ax-nav-h);
+  transition: background-color .25s ease, box-shadow .25s ease, border-color .25s ease;
+  border-bottom: 1px solid transparent; }
+.lp-bar.is-solid { background: rgba(255,255,255,0.88); backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px); border-bottom-color: var(--ax-border);
+  box-shadow: 0 4px 20px rgba(15,23,42,0.06); }
+.lp-bar-inner { height: 100%; display: flex; align-items: center; gap: 16px; }
+.lp-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; border-radius: 10px; }
+.lp-logo { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--ax-gold-2), var(--ax-gold));
+  color: var(--ax-navy); font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(201,168,76,0.35); }
+.lp-brand-name { font-weight: 800; font-size: 17px; letter-spacing: -0.02em; color: #fff; transition: color .2s; }
+.lp-bar.is-solid .lp-brand-name { color: var(--ax-navy); }
+.lp-links { display: none; align-items: center; gap: 2px; margin-left: 16px; flex: 1; }
+.lp-link { padding: 8px 12px; border-radius: 9px; font-size: 14px; font-weight: 600; text-decoration: none;
+  color: rgba(255,255,255,0.78); transition: color .18s, background-color .18s; }
+.lp-link:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.lp-link.is-active { color: var(--ax-gold-2); }
+.lp-bar.is-solid .lp-link { color: var(--ax-muted); }
+.lp-bar.is-solid .lp-link:hover { color: var(--ax-navy); background: #eef1f8; }
+.lp-bar.is-solid .lp-link.is-active { color: var(--ax-navy); background: #eef1f8; }
+.lp-actions { display: none; align-items: center; gap: 8px; margin-left: auto; }
+.lp-ghost-dark { color: rgba(255,255,255,0.9); }
+.lp-ghost-dark:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+.lp-bar.is-solid .lp-ghost-dark { color: var(--ax-text-2); }
+.lp-bar.is-solid .lp-ghost-dark:hover:not(:disabled) { background: rgba(15,23,42,0.05); }
+.lp-burger { margin-left: auto; width: 40px; height: 40px; padding: 0; color: #fff; }
+.lp-bar.is-solid .lp-burger, .lp-bar.is-open .lp-burger { color: var(--ax-navy); }
+.lp-bar.is-open { background: #fff; border-bottom-color: var(--ax-border); }
+.lp-bar.is-open .lp-brand-name { color: var(--ax-navy); }
+.lp-mobile { position: fixed; top: var(--ax-nav-h); left: 0; right: 0; z-index: 59; background: #fff;
+  border-bottom: 1px solid var(--ax-border); box-shadow: var(--ax-shadow-lg); padding: 12px 16px 18px; }
+.lp-mobile a.lp-mlink { display: block; padding: 12px; border-radius: 10px; font-weight: 600; color: var(--ax-text-2); text-decoration: none; }
+.lp-mobile a.lp-mlink:hover { background: var(--ax-surface-2); }
+@media (min-width: 900px) {
+  .lp-links, .lp-actions { display: flex; }
+  .lp-burger, .lp-mobile { display: none !important; }
+}
+
+/* hero */
+.lp-hero { position: relative; overflow: hidden; color: #fff; padding: calc(var(--ax-nav-h) + 56px) 0 88px;
+  background: linear-gradient(125deg, var(--ax-navy) 0%, var(--ax-navy-2) 55%, #1b3170 100%); }
+.lp-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 44px 44px; mask-image: radial-gradient(ellipse at 30% 30%, #000 20%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at 30% 30%, #000 20%, transparent 70%); }
+.lp-glow { position: absolute; border-radius: 50%; pointer-events: none; filter: blur(10px); animation: lp-drift 12s ease-in-out infinite; }
+.lp-hero-grid { position: relative; display: grid; gap: 48px; align-items: center; }
+@media (min-width: 980px) { .lp-hero-grid { grid-template-columns: 1.05fr 1fr; gap: 56px; } }
+.lp-eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
+  background: rgba(201,168,76,0.14); border: 1px solid rgba(201,168,76,0.35); color: var(--ax-gold-2);
+  font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.lp-h1 { font-size: clamp(34px, 5.4vw, 58px); line-height: 1.06; letter-spacing: -0.035em; font-weight: 800; margin: 22px 0 18px; }
+.lp-h1 em { font-style: normal; background: linear-gradient(90deg, var(--ax-gold-2), var(--ax-gold));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lp-lead { font-size: clamp(16px, 1.6vw, 18px); line-height: 1.7; color: rgba(255,255,255,0.74); max-width: 560px; margin: 0; }
+.lp-cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.lp-btn-outline-dark { background: rgba(255,255,255,0.06); color: #fff; border-color: rgba(255,255,255,0.22); }
+.lp-btn-outline-dark:hover:not(:disabled) { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.35); }
+.lp-checks { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 30px 0 0; padding: 0; list-style: none;
+  font-size: 13px; color: rgba(255,255,255,0.7); }
+.lp-checks li { display: inline-flex; align-items: center; gap: 7px; }
+.lp-checks svg { color: var(--ax-gold-2); }
+
+/* demo card */
+.lp-demo { position: relative; color: var(--ax-text); padding: 18px; border-radius: 18px; min-width: 0;
+  box-shadow: 0 30px 80px rgba(3,8,24,0.45); animation: lp-float 7s ease-in-out infinite; }
+.lp-demo-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lp-demo-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.lp-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--ax-border); background: var(--ax-surface); transition: border-color .2s, background-color .2s; }
+.lp-row.is-absent { background: #fff8f8; border-color: #fbd5d5; }
+.lp-row-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-row-roll { font-size: 12px; color: var(--ax-muted); font-weight: 500; }
+.lp-seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--ax-surface-2); border: 1px solid var(--ax-border); flex-shrink: 0; }
+.lp-seg button { border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 700; height: 28px; min-width: 34px;
+  padding: 0 10px; border-radius: 7px; cursor: pointer; color: var(--ax-muted); transition: background-color .18s, color .18s, box-shadow .18s; }
+.lp-seg button[aria-pressed="true"].p { background: var(--ax-success); color: #fff; box-shadow: 0 2px 6px rgba(22,163,74,.3); }
+.lp-seg button[aria-pressed="true"].a { background: var(--ax-danger); color: #fff; box-shadow: 0 2px 6px rgba(220,38,38,.3); }
+.lp-seg button:focus-visible { box-shadow: var(--ax-ring); }
+@media (max-width: 420px) { .lp-seg-label { display: none; } }
+.lp-sticker { position: absolute; top: -14px; right: 18px; }
+
+/* sections */
+.lp-section { padding: 96px 0; }
+@media (max-width: 640px) { .lp-section { padding: 64px 0; } }
+.lp-kicker { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ax-blue); }
+.lp-h2 { font-size: clamp(26px, 3.4vw, 38px); line-height: 1.15; letter-spacing: -0.03em; font-weight: 800; margin: 10px 0 12px; color: var(--ax-text); }
+.lp-sub { font-size: 16px; line-height: 1.7; color: var(--ax-muted); margin: 0; max-width: 640px; }
+.lp-head-center { text-align: center; margin: 0 auto 48px; max-width: 680px; }
+.lp-head-center .lp-sub { margin: 0 auto; }
+
+.lp-stats { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 720px) { .lp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1080px) { .lp-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .lp-stats > :last-child { grid-column: 1 / -1; } }
+
+.lp-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+.lp-feature { padding: 22px; height: 100%; }
+.lp-feature:hover .lp-ficon { background: var(--ax-navy); color: var(--ax-gold-2); transform: rotate(-6deg) scale(1.05); }
+.lp-ficon { width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ax-blue-soft); color: var(--ax-blue); transition: background-color .25s, color .25s, transform .3s var(--ax-ease); }
+.lp-feature h3 { font-size: 16px; font-weight: 700; margin: 16px 0 6px; letter-spacing: -0.01em; }
+.lp-feature p { font-size: 14px; line-height: 1.65; color: var(--ax-muted); margin: 0; }
+
+.lp-steps { display: grid; gap: 16px; grid-template-columns: 1fr; counter-reset: step; list-style: none; padding: 0; margin: 0; }
+@media (min-width: 720px) { .lp-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1080px) { .lp-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.lp-step { position: relative; padding: 24px 22px; }
+.lp-step-num { font-size: 12px; font-weight: 800; letter-spacing: .08em; color: var(--ax-gold); }
+.lp-step h3 { font-size: 16px; font-weight: 700; margin: 14px 0 6px; }
+.lp-step p { font-size: 14px; line-height: 1.65; color: var(--ax-muted); margin: 0; }
+.lp-step-arrow { display: none; position: absolute; top: 34px; right: -14px; z-index: 1; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--ax-surface); border: 1px solid var(--ax-border); color: var(--ax-gold); align-items: center; justify-content: center; }
+@media (min-width: 1080px) { .lp-step:not(:last-child) .lp-step-arrow { display: inline-flex; } }
+
+.lp-tabs { display: flex; gap: 6px; padding: 5px; border-radius: 14px; background: var(--ax-surface); border: 1px solid var(--ax-border);
+  width: fit-content; max-width: 100%; margin: 0 auto 28px; overflow-x: auto; }
+.lp-tab { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 10px; border: 0; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--ax-muted); background: transparent; white-space: nowrap;
+  transition: background-color .2s, color .2s; }
+.lp-tab:hover { color: var(--ax-navy); }
+.lp-tab[aria-selected="true"] { background: var(--ax-navy); color: #fff; }
+@media (max-width: 480px) { .lp-tab { padding: 0 12px; font-size: 13px; } .lp-tab .lp-tab-long { display: none; } }
+.lp-role { display: grid; gap: 0; overflow: hidden; }
+@media (min-width: 900px) { .lp-role { grid-template-columns: 1fr 1.15fr; } }
+.lp-role-img { position: relative; min-height: 240px; }
+.lp-role-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.lp-role-img::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(11,21,48,0.75)); }
+.lp-role-cap { position: absolute; left: 20px; bottom: 18px; right: 20px; z-index: 1; color: #fff; font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+.lp-role-body { padding: 28px; }
+@media (max-width: 640px) { .lp-role-body { padding: 22px 18px; } }
+.lp-points { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 12px; }
+@media (min-width: 560px) { .lp-points { grid-template-columns: 1fr 1fr; } }
+.lp-points li { display: flex; gap: 10px; font-size: 14px; line-height: 1.55; color: var(--ax-text-2); }
+.lp-points li svg { color: var(--ax-success); margin-top: 2px; }
+
+.lp-split { display: grid; gap: 20px; }
+@media (min-width: 960px) { .lp-split { grid-template-columns: 1fr 1fr; } }
+.lp-panel { padding: 26px; display: flex; flex-direction: column; gap: 18px; }
+@media (max-width: 640px) { .lp-panel { padding: 20px 16px; } }
+.lp-panel-icon { width: 42px; height: 42px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.lp-calc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lp-result { border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.6; border: 1px solid; }
+.lp-email { border: 1px solid var(--ax-border); border-radius: 14px; overflow: hidden; font-size: 14px; }
+.lp-email-head { padding: 12px 16px; background: var(--ax-surface-2); border-bottom: 1px solid var(--ax-border); display: grid; gap: 4px; font-size: 13px; color: var(--ax-muted); }
+.lp-email-head b { color: var(--ax-text-2); font-weight: 600; }
+.lp-email-body { padding: 16px; color: var(--ax-text-2); line-height: 1.65; }
+.lp-email-body ul { margin: 8px 0 12px; padding-left: 18px; }
+
+.lp-sec-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); margin-top: 40px; }
+.lp-sec { display: flex; gap: 14px; align-items: flex-start; padding: 18px; }
+.lp-sec h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; }
+.lp-sec p { margin: 0; font-size: 13px; color: var(--ax-muted); line-height: 1.6; }
+
+.lp-cta { position: relative; overflow: hidden; border-radius: 22px; color: #fff; padding: 56px 32px; text-align: center; isolation: isolate; }
+@media (max-width: 640px) { .lp-cta { padding: 44px 20px; border-radius: 18px; } }
+.lp-cta img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.lp-cta::before { content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(120deg, rgba(11,21,48,0.94), rgba(20,34,74,0.88) 55%, rgba(27,49,112,0.82)); }
+
+.lp-footer { background: var(--ax-navy); color: rgba(255,255,255,0.6); padding: 48px 0 28px; margin-top: 96px; font-size: 14px; }
+.lp-footer-grid { display: grid; gap: 32px; grid-template-columns: 1fr; padding-bottom: 32px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+@media (min-width: 720px) { .lp-footer-grid { grid-template-columns: 1.6fr 1fr 1fr; } }
+.lp-footer h4 { color: var(--ax-gold-2); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 14px; }
+.lp-footer a { color: rgba(255,255,255,0.68); text-decoration: none; display: inline-block; padding: 4px 0; border-radius: 6px; }
+.lp-footer a:hover { color: #fff; }
+
+/* scroll reveal */
+.lp-reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ax-ease), transform .7s var(--ax-ease); }
+.lp-reveal.is-in { opacity: 1; transform: none; }
+.lp-reveal-group.is-in > * { animation: ax-fade-up .6s var(--ax-ease) both; }
+.lp-reveal-group > * { opacity: 0; }
+.lp-reveal-group.is-in > * { opacity: 1; }
+.lp-reveal-group.is-in > *:nth-child(2) { animation-delay: .06s; }
+.lp-reveal-group.is-in > *:nth-child(3) { animation-delay: .12s; }
+.lp-reveal-group.is-in > *:nth-child(4) { animation-delay: .18s; }
+.lp-reveal-group.is-in > *:nth-child(5) { animation-delay: .24s; }
+.lp-reveal-group.is-in > *:nth-child(6) { animation-delay: .3s; }
+.lp-reveal-group.is-in > *:nth-child(n + 7) { animation-delay: .36s; }
+
+@keyframes lp-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes lp-drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(24px, -18px); } }
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal, .lp-reveal-group > * { opacity: 1 !important; transform: none !important; }
+  .lp-demo, .lp-glow { animation: none !important; }
+}
+`;
+
+// Reveal-on-scroll wrapper. `group` staggers direct children instead of the box itself.
+const Reveal = ({ as = "div", group = false, className = "", children, ...rest }) => {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === "undefined");
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || visible) return undefined;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisible(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -60px 0px", threshold: 0.08 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible]);
+
+  const base = group ? "lp-reveal-group" : "lp-reveal";
+  const cls = `${base}${visible ? " is-in" : ""} ${className}`.trim();
+  if (as === "ol") {
+    return <ol ref={ref} className={cls} {...rest}>{children}</ol>;
+  }
+  return <div ref={ref} className={cls} {...rest}>{children}</div>;
+};
+
+const SectionHead = ({ kicker, title, sub }) => (
+  <Reveal className="lp-head-center">
+    <div className="lp-kicker">{kicker}</div>
+    <h2 className="lp-h2">{title}</h2>
+    {sub && <p className="lp-sub">{sub}</p>}
+  </Reveal>
+);
+
+// Classes a student must attend in a row to reach the threshold, or may skip while staying above it.
+const thresholdMath = (attended, held, threshold = ATTENDANCE_THRESHOLD) => {
+  const t = threshold / 100;
+  const pct = held > 0 ? (attended / held) * 100 : 0;
+  const need = Math.max(0, Math.ceil((t * held - attended) / (1 - t) - 1e-9));
+  const canSkip = Math.max(0, Math.floor(attended / t - held + 1e-9));
+  return { pct, need, canSkip };
+};
+
+// ── Interactive preview of the teacher's "Mark attendance" screen ───────────
+const AttendanceDemo = () => {
+  const toast = useToast();
+  const [present, setPresent] = useState(() => SAMPLE_STUDENTS.map((_, i) => i !== 2));
+  const count = present.filter(Boolean).length;
+  const pct = Math.round((count / SAMPLE_STUDENTS.length) * 100);
+
+  const setOne = (i, value) => setPresent((prev) => prev.map((v, j) => (j === i ? value : v)));
+
+  return (
+    <div className="ax-card lp-demo" role="group" aria-label="Interactive preview of the mark attendance screen">
+      <span className="ax-badge ax-badge-gold lp-sticker">
+        <Icon name="sparkles" size={13} /> Try it — sample data
+      </span>
+      <div className="lp-demo-head">
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ax-muted)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            Mark attendance
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", marginTop: 2 }}>Period 3 · DBMS</div>
+          <div className="lp-demo-meta">
+            <span className="ax-badge ax-badge-info">Semester 1</span>
+            <span className="ax-badge">Section PA</span>
+            <span className="ax-badge">
+              <Icon name="clock" size={12} /> 11:00 – 11:50
+            </span>
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", color: pct < ATTENDANCE_THRESHOLD ? "var(--ax-danger)" : "var(--ax-success)" }} aria-live="polite">
+            {pct}%
+          </div>
+          <div style={{ fontSize: 12, color: "var(--ax-muted)" }}>
+            {count}/{SAMPLE_STUDENTS.length} present
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
+        {SAMPLE_STUDENTS.map((s, i) => (
+          <div key={s.roll} className={`lp-row${present[i] ? "" : " is-absent"}`}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="lp-row-name">{s.name}</div>
+              <div className="lp-row-roll">{s.roll}</div>
+            </div>
+            <div className="lp-seg" role="group" aria-label={`Attendance for ${s.name}`}>
+              <button type="button" className="p" aria-pressed={present[i]} onClick={() => setOne(i, true)}>
+                P<span className="lp-seg-label">resent</span>
+              </button>
+              <button type="button" className="a" aria-pressed={!present[i]} onClick={() => setOne(i, false)}>
+                A<span className="lp-seg-label">bsent</span>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+        <button type="button" className="ax-btn ax-btn-secondary ax-btn-sm" onClick={() => setPresent(SAMPLE_STUDENTS.map(() => true))}>
+          <Icon name="checkCircle" size={14} /> Mark all present
+        </button>
+        <button
+          type="button"
+          className="ax-btn ax-btn-primary ax-btn-sm"
+          style={{ marginLeft: "auto" }}
+          onClick={() => toast.info("This is just a preview. Sign in as a teacher to record real attendance.")}
+        >
+          Submit attendance <Icon name="arrowRight" size={14} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ── 75% calculator (same idea the AI tip is built around) ──────────────────
+const ThresholdCalculator = () => {
+  const [attended, setAttended] = useState("28");
+  const [held, setHeld] = useState("40");
+  const a = Math.max(0, Math.floor(Number(attended) || 0));
+  const h = Math.max(0, Math.floor(Number(held) || 0));
+  const invalid = a > h;
+  const { pct, need, canSkip } = thresholdMath(a, h);
+  const below = pct < ATTENDANCE_THRESHOLD;
+
+  let tone;
+  let message;
+  if (h === 0) {
+    tone = "info";
+    message = "Enter the number of classes held so far.";
+  } else if (invalid) {
+    tone = "warning";
+    message = "Classes attended can't be more than classes held.";
+  } else if (below) {
+    tone = "danger";
+    message = (
+      <>
+        You're at <b>{pct.toFixed(1)}%</b>. Attend the next <b>{need}</b> class{need === 1 ? "" : "es"} in a row to get back to {ATTENDANCE_THRESHOLD}%.
+      </>
+    );
+  } else {
+    tone = "success";
+    message = (
+      <>
+        You're at <b>{pct.toFixed(1)}%</b> — above {ATTENDANCE_THRESHOLD}%.{" "}
+        {canSkip > 0 ? (
+          <>You could miss up to <b>{canSkip}</b> class{canSkip === 1 ? "" : "es"} and still stay at or above it.</>
+        ) : (
+          <>Missing even one more class would drop you below it.</>
+        )}
+      </>
+    );
+  }
+
+  const toneStyle = {
+    info: { background: "var(--ax-blue-soft)", borderColor: "#c7d6fe", color: "#1e3a8a" },
+    warning: { background: "var(--ax-warning-soft)", borderColor: "#fde68a", color: "#92400e" },
+    danger: { background: "var(--ax-danger-soft)", borderColor: "#fecaca", color: "#991b1b" },
+    success: { background: "var(--ax-success-soft)", borderColor: "#bbf7d0", color: "#166534" },
+  }[tone];
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div className="lp-calc">
+        <div>
+          <label className="ax-label" htmlFor="lp-attended">Classes attended</label>
+          <input id="lp-attended" className="ax-input" type="number" inputMode="numeric" min="0" value={attended}
+            onChange={(e) => setAttended(e.target.value)} aria-invalid={invalid} />
+        </div>
+        <div>
+          <label className="ax-label" htmlFor="lp-held">Classes held</label>
+          <input id="lp-held" className="ax-input" type="number" inputMode="numeric" min="0" value={held}
+            onChange={(e) => setHeld(e.target.value)} aria-invalid={invalid} />
+        </div>
+      </div>
+      <div className="lp-result" style={toneStyle} aria-live="polite">{message}</div>
+    </div>
+  );
+};
+
+// ── Live numbers from the backend (hidden if the request fails) ────────────
+const LiveStats = () => {
+  const [state, setState] = useState({ loading: true, data: null, failed: false });
+
+  useEffect(() => {
+    let alive = true;
+    attendanceService
+      .getPublicStats()
+      .then((res) => {
+        if (!alive) return;
+        if (res?.success && res.data) setState({ loading: false, data: res.data, failed: false });
+        else setState({ loading: false, data: null, failed: true });
+      })
+      .catch(() => alive && setState({ loading: false, data: null, failed: true }));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (state.failed) return null;
+  const d = state.data || {};
+  const items = [
+    { label: "Students", value: d.students, icon: "users", tone: "blue" },
+    { label: "Teachers", value: d.teachers, icon: "teacher", tone: "gold" },
+    { label: "Sections", value: d.sections, icon: "layers", tone: "navy" },
+    { label: "Classes recorded", value: d.classesRecorded, icon: "clipboard", tone: "success" },
+    { label: "Average attendance", value: d.averageAttendance, icon: "chart", tone: "warning", suffix: "%", decimals: 1 },
+  ];
+
+  return (
+    <section aria-labelledby="lp-live-title" style={{ position: "relative", marginTop: -40, zIndex: 2 }}>
+      <div className="lp-wrap">
+        <div className="ax-card" style={{ padding: 18, boxShadow: "var(--ax-shadow-lg)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "2px 4px 14px" }}>
+            <h2 id="lp-live-title" className="ax-section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="ax-badge ax-badge-success" style={{ height: 22 }}>
+                <span className="ax-dot" /> Live
+              </span>
+              Numbers from this AttendX deployment
+            </h2>
+            <span className="ax-section-sub" style={{ margin: 0 }}>Pulled straight from the database</span>
+          </div>
+          <div className="lp-stats ax-stagger">
+            {items.map((it) => (
+              <StatCard
+                key={it.label}
+                label={it.label}
+                value={Number(it.value) || 0}
+                icon={it.icon}
+                tone={it.tone}
+                suffix={it.suffix}
+                decimals={it.decimals}
+                loading={state.loading}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 const Landing = () => {
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const rootRef = useRef(null);
+  const [activeId, setActiveId] = useState("");
+  const [roleTab, setRoleTab] = useState(ROLES[0].id);
+  const tabRefs = useRef({});
 
+  const dashboardPath = ROLE_REDIRECTS[user?.role] || "/login";
+
+  // Signed-in users go straight to their dashboard
   useEffect(() => {
-    if (isAuthenticated && user?.role)
-      navigate(ROLE_REDIRECTS[user.role] || "/login", { replace: true });
+    if (isAuthenticated && user?.role) navigate(ROLE_REDIRECTS[user.role] || "/login", { replace: true });
   }, [isAuthenticated, user, navigate]);
 
   useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 60);
-    window.addEventListener("scroll", fn);
-    return () => window.removeEventListener("scroll", fn);
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Inject responsive CSS
+  // Highlight the nav link of the section currently in view
   useEffect(() => {
-    const styleId = "land-responsive-css";
-    if (!document.getElementById(styleId)) {
-      const el = document.createElement("style");
-      el.id = styleId;
-      el.textContent = RESPONSIVE_CSS;
-      document.head.appendChild(el);
-    }
-    return () => document.getElementById(styleId)?.remove();
-  }, []);
-
-  useEffect(() => {
-    if (!rootRef.current) return undefined;
-
-    const root = rootRef.current;
-    const navBtns = root.querySelectorAll(".land-nav-btn");
-    const actionBtns = root.querySelectorAll(".land-cta-btn");
-    const sectionStaggerTargets = [
-      { section: ".land-features-wrap", items: ".land-features .land-reveal-card" },
-      { section: ".land-roles-wrap", items: ".land-roles .land-reveal-card" },
-      { section: ".land-tests-wrap", items: ".land-tests .land-reveal-card" },
-    ];
-
-    gsap.fromTo(
-      ".land-hero-anim",
-      { opacity: 0, y: 28 },
-      { opacity: 1, y: 0, duration: 0.75, stagger: 0.1, ease: "power3.out" }
-    );
-    gsap.to(".land-float-card", {
-      y: -8,
-      duration: 2.4,
-      ease: "sine.inOut",
-      yoyo: true,
-      repeat: -1,
-    });
-
-    const observer = new IntersectionObserver(
+    if (typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const selector = entry.target.getAttribute("data-stagger-items");
-          if (selector) {
-            const items = entry.target.querySelectorAll(selector);
-            if (items.length) {
-              gsap.fromTo(
-                items,
-                { opacity: 0, y: 28, scale: 0.98 },
-                { opacity: 1, y: 0, scale: 1, duration: 0.7, stagger: 0.1, ease: "power3.out", clearProps: "all" }
-              );
-            }
-          }
-          observer.unobserve(entry.target);
+        entries.forEach((e) => {
+          if (e.isIntersecting) setActiveId(e.target.id);
         });
       },
-      { threshold: 0.2 }
+      { rootMargin: "-45% 0px -50% 0px" }
     );
-
-    sectionStaggerTargets.forEach(({ section, items }) => {
-      const el = root.querySelector(section);
-      if (!el) return;
-      el.setAttribute("data-stagger-items", items);
-      observer.observe(el);
+    NAV_LINKS.forEach(({ id }) => {
+      const el = document.getElementById(id);
+      if (el) io.observe(el);
     });
-
-    const navEnter = (event) => gsap.to(event.currentTarget, { y: -3, color: C.gold, duration: 0.2, ease: "power2.out" });
-    const navLeave = (event) => gsap.to(event.currentTarget, { y: 0, color: "rgba(255,255,255,0.88)", duration: 0.2, ease: "power2.out" });
-    const btnEnter = (event) => gsap.to(event.currentTarget, { y: -4, scale: 1.02, duration: 0.2, ease: "power2.out" });
-    const btnLeave = (event) => gsap.to(event.currentTarget, { y: 0, scale: 1, duration: 0.2, ease: "power2.out" });
-
-    navBtns.forEach((btn) => {
-      btn.addEventListener("mouseenter", navEnter);
-      btn.addEventListener("mouseleave", navLeave);
-    });
-    actionBtns.forEach((btn) => {
-      btn.addEventListener("mouseenter", btnEnter);
-      btn.addEventListener("mouseleave", btnLeave);
-    });
-
-    return () => {
-      observer.disconnect();
-      navBtns.forEach((btn) => {
-        btn.removeEventListener("mouseenter", navEnter);
-        btn.removeEventListener("mouseleave", navLeave);
-      });
-      actionBtns.forEach((btn) => {
-        btn.removeEventListener("mouseenter", btnEnter);
-        btn.removeEventListener("mouseleave", btnLeave);
-      });
-    };
+    return () => io.disconnect();
   }, []);
 
-  const scrollTo = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  // Close the mobile menu with Escape / when resizing to desktop
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (e) => e.key === "Escape" && setMenuOpen(false);
+    const onResize = () => window.innerWidth >= 900 && setMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [menuOpen]);
+
+  const goTo = (e, id) => {
+    e.preventDefault();
     setMenuOpen(false);
+    const el = document.getElementById(id);
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    window.history.replaceState(null, "", `#${id}`);
   };
 
+  const scrollTop = (e) => {
+    e.preventDefault();
+    setMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const onTabKey = (e, idx) => {
+    let next = null;
+    if (e.key === "ArrowRight") next = (idx + 1) % ROLES.length;
+    if (e.key === "ArrowLeft") next = (idx - 1 + ROLES.length) % ROLES.length;
+    if (e.key === "Home") next = 0;
+    if (e.key === "End") next = ROLES.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    setRoleTab(ROLES[next].id);
+    tabRefs.current[ROLES[next].id]?.focus();
+  };
+
+  const role = useMemo(() => ROLES.find((r) => r.id === roleTab) || ROLES[0], [roleTab]);
+  const barClass = `lp-bar${scrolled ? " is-solid" : ""}${menuOpen ? " is-open" : ""}`;
+
+  const authButtons = (size = "", dark = false) =>
+    isAuthenticated ? (
+      <Link to={dashboardPath} className={`ax-btn ax-btn-gold ${size}`}>
+        Go to dashboard <Icon name="arrowRight" size={16} />
+      </Link>
+    ) : (
+      <>
+        <Link to="/login" className={`ax-btn ${dark ? "lp-btn-outline-dark" : "ax-btn-secondary"} ${size}`}>
+          <Icon name="login" size={16} /> Sign in
+        </Link>
+        <Link to="/register" className={`ax-btn ax-btn-gold ${size}`}>
+          Create account <Icon name="arrowRight" size={16} />
+        </Link>
+      </>
+    );
+
   return (
-    <div ref={rootRef} style={{ fontFamily: "'Segoe UI', 'Inter', Arial, sans-serif", color: C.navy, overflowX: "hidden" }}>
+    <div className="lp">
+      <style>{PAGE_CSS}</style>
 
-      {/* ══════════════════════════════ NAVBAR ══════════════════════════════ */}
-      <nav style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
-        background: scrolled ? "rgba(10,22,40,0.96)" : "rgba(10,22,40,0.30)",
-        backdropFilter: "blur(18px)",
-        WebkitBackdropFilter: "blur(18px)",
-        borderBottom: scrolled ? `2px solid ${C.gold}` : "2px solid rgba(201,168,76,0.15)",
-        transition: "all 0.4s ease",
-      }}>
-        <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 28px", height: "70px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      {/* ════════════ TOP BAR ════════════ */}
+      <header className={barClass}>
+        <div className="lp-wrap lp-bar-inner">
+          <a href="#top" className="lp-brand" onClick={scrollTop} aria-label="AttendX — back to top">
+            <span className="lp-logo">AX</span>
+            <span className="lp-brand-name">AttendX</span>
+          </a>
 
-          {/* Logo */}
-          <div className="land-hero-anim" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", fontWeight: 900, color: C.navy }}>AX</div>
-            <div>
-              <div style={{ color: C.white, fontWeight: 900, fontSize: "18px", letterSpacing: "0.5px" }}>AttendX</div>
-              <div style={{ color: C.gold, fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase" }}>ATTENDANCE OS</div>
-            </div>
-          </div>
-
-          {/* Desktop Links */}
-          <div className="land-nav-links" style={{ gap: "4px" }}>
+          <nav className="lp-links" aria-label="Page sections">
             {NAV_LINKS.map((l) => (
-              <button className="land-nav-btn" key={l.label} onClick={() => scrollTo(l.href)}
-                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.88)", fontSize: "14px", padding: "8px 16px", cursor: "pointer", borderRadius: "6px", fontWeight: 500, transition: "color 0.2s" }}
-                onMouseEnter={e => e.target.style.color = C.gold}
-                onMouseLeave={e => e.target.style.color = "rgba(255,255,255,0.88)"}
-              >{l.label}</button>
+              <a key={l.id} href={`#${l.id}`} onClick={(e) => goTo(e, l.id)}
+                className={`lp-link${activeId === l.id ? " is-active" : ""}`}
+                aria-current={activeId === l.id ? "true" : undefined}>
+                {l.label}
+              </a>
             ))}
-          </div>
+          </nav>
 
-          {/* Auth (Desktop) */}
-          <div className="land-nav-auth" style={{ gap: "10px", alignItems: "center" }}>
+          <div className="lp-actions">
             {isAuthenticated ? (
-              <Link className="land-cta-btn land-hero-anim" to={ROLE_REDIRECTS[user?.role] || "/"} style={S.btnGold}>Dashboard →</Link>
+              <Link to={dashboardPath} className="ax-btn ax-btn-gold">Dashboard</Link>
             ) : (
               <>
-                <Link className="land-cta-btn land-hero-anim" to="/login" style={S.btnGhost}>Sign In</Link>
-                <Link className="land-cta-btn land-hero-anim" to="/register" style={S.btnGold}>Register Now</Link>
+                <Link to="/login" className="ax-btn ax-btn-ghost lp-ghost-dark">Sign in</Link>
+                <Link to="/register" className="ax-btn ax-btn-gold">Create account</Link>
               </>
             )}
           </div>
 
-          {/* Hamburger (Mobile) */}
-          <button
-            className="land-hamburger"
-            onClick={() => setMenuOpen(!menuOpen)}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: "6px" }}
-            aria-label="Toggle menu"
-          >
-            <span style={{ display: "block", width: "23px", height: "2px", background: "#fff", borderRadius: "2px", transition: "all 0.3s", transform: menuOpen ? "rotate(45deg) translate(5px,5px)" : "none" }} />
-            <span style={{ display: "block", width: "23px", height: "2px", background: "#fff", borderRadius: "2px", transition: "all 0.3s", opacity: menuOpen ? 0 : 1, margin: "4px 0" }} />
-            <span style={{ display: "block", width: "23px", height: "2px", background: "#fff", borderRadius: "2px", transition: "all 0.3s", transform: menuOpen ? "rotate(-45deg) translate(5px,-5px)" : "none" }} />
+          <button type="button" className="ax-btn ax-btn-ghost lp-burger" aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen} aria-controls="lp-mobile-menu" onClick={() => setMenuOpen((o) => !o)}>
+            <Icon name={menuOpen ? "x" : "menu"} size={22} />
           </button>
         </div>
+      </header>
 
-        {/* Mobile Dropdown */}
-        {menuOpen && (
-          <div style={{ background: "rgba(10,22,40,0.97)", backdropFilter: "blur(16px)", borderTop: `1px solid rgba(201,168,76,0.2)`, padding: "16px 28px 22px", display: "flex", flexDirection: "column", gap: "2px" }}>
+      {menuOpen && (
+        <div id="lp-mobile-menu" className="lp-mobile ax-fade-up">
+          <nav aria-label="Page sections (mobile)">
             {NAV_LINKS.map((l) => (
-              <button key={l.label} onClick={() => scrollTo(l.href)}
-                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: "15px", padding: "12px 0", cursor: "pointer", textAlign: "left", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-              >{l.label}</button>
+              <a key={l.id} href={`#${l.id}`} className="lp-mlink" onClick={(e) => goTo(e, l.id)}>{l.label}</a>
             ))}
-            <div style={{ display: "flex", gap: "10px", paddingTop: "14px" }}>
-              <Link to="/login" style={{ ...S.btnGhost, flex: 1, textAlign: "center", padding: "10px", fontSize: "13px" }} onClick={() => setMenuOpen(false)}>Sign In</Link>
-              <Link to="/register" style={{ ...S.btnGold, flex: 1, textAlign: "center", padding: "10px", fontSize: "13px" }} onClick={() => setMenuOpen(false)}>Register</Link>
-            </div>
-          </div>
-        )}
-      </nav>
-
-      {/* ══════════════════════════════ HERO ════════════════════════════════ */}
-      {/* Split layout: transparent nav floats over hero; left is navy, right is clear image */}
-      <section className="land-hero" style={{ display: "grid", minHeight: "100vh", paddingTop: "70px" }}>
-
-        {/* LEFT – solid navy panel, perfectly crisp */}
-        <div className="land-hero-left" style={{ background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navyMid} 100%)`, display: "flex", flexDirection: "column", justifyContent: "center", position: "relative", overflow: "hidden" }}>
-          {/* Decorative accent */}
-          <div style={{ position: "absolute", top: "0", left: "0", right: "0", height: "4px", background: `linear-gradient(to right, ${C.gold}, ${C.goldL}, ${C.gold})` }} />
-          <div style={{ position: "absolute", bottom: "-60px", right: "-60px", width: "300px", height: "300px", borderRadius: "50%", background: "rgba(201,168,76,0.07)", pointerEvents: "none" }} />
-
-          <div className="land-hero-anim" style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(201,168,76,0.15)", border: `1px solid rgba(201,168,76,0.35)`, borderRadius: "30px", padding: "7px 18px", marginBottom: "28px", width: "fit-content" }}>
-            <span style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase" }}>Smart Campus Operations</span>
-          </div>
-
-          <h1 className="land-hero-anim" style={{ color: C.white, fontSize: "clamp(32px, 4vw, 58px)", fontWeight: 900, lineHeight: 1.12, margin: "0 0 12px", letterSpacing: "-1px" }}>
-            Smarter Campus
-          </h1>
-          <h1 className="land-hero-anim" style={{ color: C.gold, fontSize: "clamp(32px, 4vw, 58px)", fontWeight: 900, lineHeight: 1.12, margin: "0 0 24px", letterSpacing: "-1px" }}>
-            Management Platform
-          </h1>
-
-          <p className="land-hero-anim" style={{ color: "rgba(255,255,255,0.74)", fontSize: "17px", lineHeight: 1.9, margin: "0 0 36px", maxWidth: "520px" }}>
-            AttendX helps institutions track attendance, improve accountability, and make faster academic decisions with clean dashboards and role-based tools.
-          </p>
-
-          <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "44px" }}>
-            {isAuthenticated ? (
-              <Link className="land-cta-btn land-hero-anim" to={ROLE_REDIRECTS[user?.role] || "/"} style={S.btnHeroGold}>Go to Dashboard →</Link>
-            ) : (
-              <>
-                <Link className="land-cta-btn land-hero-anim" to="/register" style={S.btnHeroGold}>Get Started →</Link>
-                <Link className="land-cta-btn land-hero-anim" to="/login" style={S.btnHeroGhost}>Sign In</Link>
-              </>
-            )}
-          </div>
-
-          {/* Quick program badges */}
-          <div className="land-quick-links" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "4px" }}>Platform Modules</div>
-            {["System Administration", "Faculty Analytics Setup", "Student Access Layer"].map((t) => (
-              <button className="land-cta-btn land-hero-anim" key={t} onClick={() => scrollTo("programs")} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.78)", padding: "9px 18px", borderRadius: "6px", fontSize: "13px", cursor: "pointer", textAlign: "left", width: "fit-content", transition: "all 0.2s", fontWeight: 500 }}
-                onMouseEnter={e => { e.target.style.background = "rgba(201,168,76,0.15)"; e.target.style.borderColor = "rgba(201,168,76,0.4)"; e.target.style.color = C.gold; }}
-                onMouseLeave={e => { e.target.style.background = "rgba(255,255,255,0.06)"; e.target.style.borderColor = "rgba(255,255,255,0.14)"; e.target.style.color = "rgba(255,255,255,0.78)"; }}
-              >
-                {t} ›
-              </button>
-            ))}
+          </nav>
+          <div style={{ display: "grid", gridTemplateColumns: isAuthenticated ? "1fr" : "1fr 1fr", gap: 8, marginTop: 10 }}>
+            {authButtons()}
           </div>
         </div>
+      )}
 
-        {/* RIGHT – clear, full visible campus image */}
-        <div className="land-hero-img" style={{ position: "relative", overflow: "hidden" }}>
-          <img src={heroBg} alt="University Campus" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center center", display: "block" }} />
-          {/* Just a subtle left-edge fade to blend panels */}
-          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, ${C.navyMid} 0%, transparent 18%)` }} />
-          {/* Floating info card */}
-          <div className="land-hero-anim land-float-card" style={{ position: "absolute", bottom: "40px", right: "32px", background: "rgba(10,22,40,0.92)", backdropFilter: "blur(16px)", border: `1px solid rgba(201,168,76,0.4)`, borderRadius: "14px", padding: "20px 26px", display: "flex", gap: "24px" }}>
-            {[["150+", "Years Est."], ["A+", "NAAC Grade"], ["500+", "Faculty"]].map(([v, l]) => (
-              <div key={l} style={{ textAlign: "center" }}>
-                <div style={{ color: C.gold, fontWeight: 900, fontSize: "22px" }}>{v}</div>
-                <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "11px", marginTop: "2px" }}>{l}</div>
-              </div>
-            ))}
+      <main id="top">
+        {/* ════════════ HERO ════════════ */}
+        <section className="lp-hero" aria-labelledby="lp-hero-title">
+          <span className="lp-glow" aria-hidden="true" style={{ width: 420, height: 420, right: -120, top: -80, background: "radial-gradient(circle, rgba(201,168,76,0.28), transparent 65%)" }} />
+          <span className="lp-glow" aria-hidden="true" style={{ width: 360, height: 360, left: -140, bottom: -160, background: "radial-gradient(circle, rgba(47,85,212,0.35), transparent 65%)", animationDelay: "-6s" }} />
+
+          <div className="lp-wrap lp-hero-grid">
+            <div className="ax-stagger" style={{ minWidth: 0 }}>
+              <span className="lp-eyebrow">
+                <Icon name="sparkles" size={14} /> College attendance, done right
+              </span>
+              <h1 id="lp-hero-title" className="lp-h1">
+                Period-by-period attendance, <em>without the paperwork.</em>
+              </h1>
+              <p className="lp-lead">
+                AttendX gives admins, teachers and students their own portal. Teachers mark each timetable period in seconds,
+                students see exactly where they stand against the 75% rule, and parents get an email the same evening.
+              </p>
+              <div className="lp-cta-row">{authButtons("ax-btn-lg", true)}</div>
+              <ul className="lp-checks">
+                <li><Icon name="check" size={15} /> Role-based portals</li>
+                <li><Icon name="check" size={15} /> Daily parent emails at 6 PM</li>
+                <li><Icon name="check" size={15} /> AI attendance tips</li>
+              </ul>
+            </div>
+
+            <div className="ax-fade-up" style={{ animationDelay: ".15s", minWidth: 0 }}>
+              <AttendanceDemo />
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ════════════ ANNOUNCEMENT TICKER ════════════ */}
-      <div style={{ background: C.gold, padding: "10px 28px", display: "flex", alignItems: "center", gap: "14px" }}>
-        <span style={{ background: C.navy, color: C.gold, padding: "3px 12px", borderRadius: "4px", fontSize: "11px", fontWeight: 800, letterSpacing: "1.5px", whiteSpace: "nowrap" }}>NEW</span>
-        <marquee style={{ color: C.navy, fontSize: "13px", fontWeight: 600 }}>
-          &nbsp;&nbsp;AttendX v2.0 is live with upgraded dashboard experiences.&nbsp;&nbsp;|&nbsp;&nbsp;
-          Automated low-attendance notifications are fully integrated.&nbsp;&nbsp;|&nbsp;&nbsp;
-          JWT-based security keeps academic records protected.
-        </marquee>
-      </div>
+        {/* ════════════ LIVE STATS ════════════ */}
+        <LiveStats />
 
-      {/* ════════════ STATS BAR ════════════ */}
-      <section style={{ background: C.navyMid }}>
-        <div className="land-stats" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid" }}>
-          {STATS.map((s, i) => (
-            <div key={i} style={{ padding: "36px 24px", textAlign: "center", borderRight: i < 3 ? "1px solid rgba(255,255,255,0.08)" : "none" }}>
-              <div style={{ color: C.gold, fontSize: "clamp(26px,3vw,42px)", fontWeight: 900, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "12px", marginTop: "8px", textTransform: "uppercase", letterSpacing: "1px" }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+        {/* ════════════ FEATURES ════════════ */}
+        <section id="features" className="lp-section" aria-labelledby="lp-features-title">
+          <div className="lp-wrap">
+            <SectionHead
+              kicker="Features"
+              title={<span id="lp-features-title">Everything a college needs to run attendance</span>}
+              sub="From admission to the parent's inbox — every step of the attendance cycle lives in one place."
+            />
+            <Reveal group className="lp-grid">
+              {FEATURES.map((f) => (
+                <article key={f.title} className="ax-card ax-card-hover lp-feature">
+                  <span className="lp-ficon"><Icon name={f.icon} size={21} /></span>
+                  <h3>{f.title}</h3>
+                  <p>{f.text}</p>
+                </article>
+              ))}
+            </Reveal>
+          </div>
+        </section>
 
-      {/* ════════════ ABOUT ════════════ */}
-      <section id="about" className="land-section" style={{ padding: "100px 0", background: C.white }}>
-        <div style={S.container}>
-          <div className="land-two-col" style={{ display: "grid", gap: "64px", alignItems: "center" }}>
-            <div style={{ position: "relative" }}>
-              <img src={campusImg} alt="Campus" style={{ width: "100%", height: "400px", objectFit: "cover", borderRadius: "12px", display: "block", boxShadow: "0 24px 64px rgba(10,22,40,0.18)" }} />
-              <div className="land-about-badge" style={{ position: "absolute", bottom: "-28px", right: "-28px", background: C.white, borderRadius: "14px", padding: "20px 24px", boxShadow: "0 10px 40px rgba(0,0,0,0.14)", display: "flex", alignItems: "center", gap: "14px", border: `1px solid ${C.border}` }}>
-                <span style={{ fontSize: "14px", fontWeight: 900, color: C.navy, background: "#eef2fb", borderRadius: "8px", padding: "6px 10px" }}>EST</span>
-                <div>
-                  <div style={{ fontWeight: 800, color: C.navy, fontSize: "18px" }}>Est. 1998</div>
-                  <div style={{ color: C.mid, fontSize: "12px" }}>Excellence in Education</div>
-                </div>
-              </div>
-            </div>
-            <div style={{ paddingLeft: "8px" }}>
-              <span style={S.badge}>About AttendX</span>
-              <h2 style={S.h2}>Built to Make Attendance Operations Clear, Fast, and Reliable</h2>
-              <p style={S.para}>AttendX helps institutions simplify daily attendance operations with fast marking workflows, live records, and clear visibility for every department.</p>
-              <p style={S.para}>From administrators to teachers to students, each role gets a focused workspace that keeps data accurate, secure, and easy to act on.</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", margin: "24px 0 32px" }}>
-                {["NAAC A+ Accredited", "ISO Certified", "100% Digital Campus"].map((h) => (
-                  <span key={h} style={{ background: "#eef2fb", color: C.navy, padding: "7px 16px", borderRadius: "30px", fontSize: "13px", fontWeight: 600, border: `1px solid ${C.border}` }}>✓ {h}</span>
+        {/* ════════════ HOW IT WORKS ════════════ */}
+        <section id="how-it-works" className="lp-section" aria-labelledby="lp-how-title"
+          style={{ background: "linear-gradient(180deg, var(--ax-surface) 0%, var(--ax-bg) 100%)", borderBlock: "1px solid var(--ax-border)" }}>
+          <div className="lp-wrap">
+            <SectionHead
+              kicker="How it works"
+              title={<span id="lp-how-title">From timetable to parent email in four steps</span>}
+              sub="A simple daily loop that keeps records accurate and everyone in the loop."
+            />
+            <Reveal as="ol" group className="lp-steps">
+              {STEPS.map((s, i) => (
+                <li key={s.title} className="ax-card ax-card-hover lp-step">
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span className="lp-ficon" style={{ background: "var(--ax-navy)", color: "var(--ax-gold-2)" }}>
+                      <Icon name={s.icon} size={20} />
+                    </span>
+                    <span className="lp-step-num">STEP {String(i + 1).padStart(2, "0")}</span>
+                  </div>
+                  <h3>{s.title}</h3>
+                  <p>{s.text}</p>
+                  <span className="lp-step-arrow" aria-hidden="true"><Icon name="chevronRight" size={14} /></span>
+                </li>
+              ))}
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ════════════ ROLES ════════════ */}
+        <section id="roles" className="lp-section" aria-labelledby="lp-roles-title">
+          <div className="lp-wrap">
+            <SectionHead
+              kicker="Portals"
+              title={<span id="lp-roles-title">One app, three focused portals</span>}
+              sub="Each role signs in to a workspace that only shows what it needs."
+            />
+            <Reveal>
+              <div className="lp-tabs" role="tablist" aria-label="Choose a role">
+                {ROLES.map((r, idx) => (
+                  <button
+                    key={r.id}
+                    ref={(el) => { tabRefs.current[r.id] = el; }}
+                    type="button"
+                    role="tab"
+                    id={`lp-tab-${r.id}`}
+                    aria-selected={roleTab === r.id}
+                    aria-controls={`lp-panel-${r.id}`}
+                    tabIndex={roleTab === r.id ? 0 : -1}
+                    className="lp-tab"
+                    onClick={() => setRoleTab(r.id)}
+                    onKeyDown={(e) => onTabKey(e, idx)}
+                  >
+                    <Icon name={r.icon} size={16} />
+                    {r.id === "admin" ? (<>Admin<span className="lp-tab-long"> / Super Admin</span></>) : r.label}
+                  </button>
                 ))}
               </div>
-              <Link className="land-cta-btn" to="/register" style={S.btnNavy}>Explore Programs →</Link>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* ════════════ FEATURES ════════════ */}
-      <section id="features" className="land-section land-features-wrap" style={{ padding: "100px 0", background: `linear-gradient(135deg, ${C.light} 0%, #f9fbff 100%)` }}>
-        <div style={S.container}>
-          <div style={S.sectionHeader}>
-            <span style={S.badge}>Platform Features</span>
-            <h2 style={{ ...S.h2, background: "linear-gradient(135deg, #0a1628 0%, #1e3a5f 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Core Capabilities for Daily Academic Operations</h2>
-            <p style={{ color: C.mid, fontSize: "16px", maxWidth: "650px", margin: "0 auto", lineHeight: 1.8, fontWeight: "500" }}>Designed to reduce manual effort for staff, provide transparency to students, and keep attendance records accurate across the institution.</p>
+              <div key={role.id} id={`lp-panel-${role.id}`} role="tabpanel" aria-labelledby={`lp-tab-${role.id}`}
+                className="ax-card lp-role ax-fade-up" tabIndex={0}>
+                <div className="lp-role-img">
+                  <img src={role.image} alt={role.alt} loading="lazy" />
+                  <div className="lp-role-cap">
+                    <span className="lp-ficon" style={{ width: 36, height: 36, background: "rgba(255,255,255,0.16)", color: "#fff" }}>
+                      <Icon name={role.icon} size={18} />
+                    </span>
+                    {role.label} portal
+                  </div>
+                </div>
+                <div className="lp-role-body">
+                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>What {role.plural} can do</h3>
+                  <p className="lp-sub" style={{ fontSize: 15, marginTop: 6 }}>{role.summary}</p>
+                  <ul className="lp-points ax-stagger">
+                    {role.points.map((p) => (
+                      <li key={p}><Icon name="checkCircle" size={16} /> {p}</li>
+                    ))}
+                  </ul>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 24 }}>
+                    {isAuthenticated ? (
+                      <Link to={dashboardPath} className="ax-btn ax-btn-primary">Go to dashboard <Icon name="arrowRight" size={16} /></Link>
+                    ) : (
+                      <>
+                        <Link to="/login" className="ax-btn ax-btn-primary">Sign in as {role.id === "admin" ? "admin" : role.label.toLowerCase()} <Icon name="arrowRight" size={16} /></Link>
+                        {role.id !== "admin" && (
+                          <Link to="/register" className="ax-btn ax-btn-secondary">
+                            {role.id === "teacher" ? "Apply as a teacher" : "Create student account"}
+                          </Link>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Reveal>
           </div>
-          <div className="land-features" style={{ display: "grid", gap: "36px" }}>
-            {FEATURES.map((f, i) => {
-              const gradients = [
-                "linear-gradient(135deg, #f0f4ff 0%, #e8f0ff 100%)",
-                "linear-gradient(135deg, #fff5f0 0%, #ffe8e0 100%)",
-                "linear-gradient(135deg, #f0fff4 0%, #e8fff0 100%)",
-              ];
-              const borderColors = ["#93c5fd", "#fed7aa", "#86efac"];
-              const iconGrads = [
-                "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
-                "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
-                "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-              ];
-              return (
-                <div className="land-reveal-card land-feature-card" key={i}
-                  onMouseEnter={e => { 
-                    e.currentTarget.style.transform = "translateY(-14px) scale(1.02)"; 
-                    e.currentTarget.style.boxShadow = `0 32px 72px rgba(10,22,40,0.22), 0 0 60px ${borderColors[i % 3]}40`; 
-                    e.currentTarget.style.borderColor = borderColors[i % 3];
-                    e.currentTarget.querySelector(".feature-icon-bg").style.transform = "scale(1.12) rotate(8deg)";
-                    e.currentTarget.querySelector(".feature-icon-bg").style.boxShadow = `0 8px 24px ${iconGrads[i % 3].split(",")[0].match(/#[\da-f]{6}|rgb\([^)]*\)/i)[0]}40`;
-                  }}
-                  onMouseLeave={e => { 
-                    e.currentTarget.style.transform = "translateY(0) scale(1)"; 
-                    e.currentTarget.style.boxShadow = "0 16px 40px rgba(10,22,40,0.1), 0 0 30px rgba(147,197,253,0.15)"; 
-                    e.currentTarget.style.borderColor = borderColors[i % 3];
-                    e.currentTarget.querySelector(".feature-icon-bg").style.transform = "scale(1) rotate(0deg)";
-                    e.currentTarget.querySelector(".feature-icon-bg").style.boxShadow = "0 4px 12px rgba(10,22,40,0.08)";
-                  }}
-                  style={{
-                    background: gradients[i % 3],
-                    border: `2px solid ${borderColors[i % 3]}60`,
-                    borderRadius: "18px",
-                    padding: "42px 36px",
-                    boxShadow: "0 16px 40px rgba(10,22,40,0.1), 0 0 30px rgba(147,197,253,0.15)",
-                    transition: "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  {/* Animated background elements */}
-                  <div style={{
-                    position: "absolute",
-                    top: "-50%",
-                    right: "-20%",
-                    width: "300px",
-                    height: "300px",
-                    borderRadius: "50%",
-                    background: `radial-gradient(circle, ${borderColors[i % 3]}20 0%, transparent 70%)`,
-                    pointerEvents: "none",
-                    animation: "float 6s ease-in-out infinite",
-                  }} />
-                  <div style={{
-                    position: "absolute",
-                    bottom: "-40%",
-                    left: "-10%",
-                    width: "250px",
-                    height: "250px",
-                    borderRadius: "50%",
-                    background: `radial-gradient(circle, ${borderColors[i % 3]}10 0%, transparent 70%)`,
-                    pointerEvents: "none",
-                    animation: "float 8s ease-in-out infinite reverse",
-                  }} />
+        </section>
 
-                  <div style={{ position: "relative", zIndex: 2 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "22px", gap: "12px" }}>
-                      <div 
-                        className="feature-icon-bg"
-                        style={{ 
-                          display: "inline-flex", 
-                          alignItems: "center", 
-                          justifyContent: "center", 
-                          minWidth: "60px", 
-                          height: "60px", 
-                          borderRadius: "14px", 
-                          background: iconGrads[i % 3], 
-                          color: "white", 
-                          fontSize: "20px", 
-                          fontWeight: 900, 
-                          letterSpacing: "0.5px", 
-                          border: `2px solid ${borderColors[i % 3]}40`,
-                          boxShadow: "0 4px 12px rgba(10,22,40,0.08)",
-                          transition: "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
-                        }}
-                      >
-                        {f.icon}
-                      </div>
-                      <span style={{ 
-                        fontSize: "12px", 
-                        fontWeight: 700, 
-                        color: borderColors[i % 3], 
-                        background: "rgba(255,255,255,0.8)", 
-                        border: `1.5px solid ${borderColors[i % 3]}40`, 
-                        borderRadius: "999px", 
-                        padding: "6px 14px", 
-                        letterSpacing: "0.6px",
-                        textTransform: "uppercase",
-                        boxShadow: `0 2px 8px ${borderColors[i % 3]}20`,
-                      }}>
-                        {f.tag}
-                      </span>
-                    </div>
-                    <h3 style={{ 
-                      fontSize: "22px", 
-                      fontWeight: 800, 
-                      color: C.navy, 
-                      margin: "0 0 14px", 
-                      lineHeight: 1.4,
-                      letterSpacing: "-0.5px",
-                    }}>
-                      {f.title}
-                    </h3>
-                    <p style={{ 
-                      color: "#4b5563", 
-                      fontSize: "15px", 
-                      lineHeight: 1.85, 
-                      margin: 0,
-                      fontWeight: "500",
-                    }}>
-                      {f.desc}
+        {/* ════════════ AI TIPS + PARENT EMAILS ════════════ */}
+        <section id="alerts" className="lp-section" aria-labelledby="lp-alerts-title"
+          style={{ background: "linear-gradient(180deg, var(--ax-bg) 0%, var(--ax-surface) 100%)", borderTop: "1px solid var(--ax-border)" }}>
+          <div className="lp-wrap">
+            <SectionHead
+              kicker="AI tips & parent alerts"
+              title={<span id="lp-alerts-title">Nobody finds out about low attendance too late</span>}
+              sub="Students get a personal plan to stay above 75%, and parents hear about absences the same day."
+            />
+
+            <Reveal group className="lp-split">
+              {/* AI tips */}
+              <article className="ax-card ax-card-hover lp-panel">
+                <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                  <span className="lp-panel-icon" style={{ background: "var(--ax-gold-soft)", color: "#9a7420" }}><Icon name="sparkles" size={20} /></span>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>AI attendance tips, powered by Claude</h3>
+                    <p className="lp-sub" style={{ fontSize: 14, marginTop: 4 }}>
+                      On the student dashboard, Claude looks at the student's real attendance and writes a short, personal tip —
+                      including how many classes they need to attend to reach {ATTENDANCE_THRESHOLD}%.
                     </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* ════════════ ROLES / PORTALS ════════════ */}
-      <section id="programs" className="land-section land-roles-wrap" style={{ padding: "100px 0", background: C.white }}>
-        <div style={S.container}>
-          <div style={S.sectionHeader}>
-            <span style={S.badge}>Who Uses AttendX?</span>
-            <h2 style={S.h2}>Three Portals, One Connected Attendance Workflow</h2>
-            <p style={{ color: C.mid, fontSize: "16px", maxWidth: "700px", margin: "0 auto", lineHeight: 1.8 }}>Every user sees what they need: administrators oversee performance, teachers manage daily classes, and students track their own progress.</p>
-          </div>
-          <div className="land-roles" style={{ display: "grid", gap: "30px" }}>
-            {ROLES.map((r, i) => (
-              <div className="land-reveal-card land-role-card" key={i} style={{ background: "linear-gradient(180deg, #ffffff 0%, #f8faff 100%)", border: `1px solid #dbe5f2`, borderRadius: "16px", padding: "38px 30px", boxShadow: "0 10px 28px rgba(10,22,40,0.09)", transition: "all 0.3s" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "#bfdbfe"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(10,22,40,0.13)"; e.currentTarget.style.transform = "translateY(-6px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "#dbe5f2"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(10,22,40,0.09)"; e.currentTarget.style.transform = "translateY(0)"; }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px", paddingBottom: "20px", borderBottom: `1px solid ${C.light}` }}>
-                <span style={{ fontSize: "12px", fontWeight: 900, color: C.navy, background: "linear-gradient(135deg, #e0e7ff, #dbeafe)", borderRadius: "8px", padding: "6px 10px", border: "1px solid #c7d2fe" }}>{r.icon}</span>
-                  <h3 style={{ fontSize: "20px", fontWeight: 800, color: C.navy, margin: 0 }}>{r.role}</h3>
-                </div>
-                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                  {r.perks.map((p, j) => (
-                    <li key={j} style={{ display: "flex", alignItems: "center", gap: "10px", color: "#444", fontSize: "14px" }}>
-                      <span style={{ color: C.gold, fontWeight: 800, fontSize: "16px", flexShrink: 0 }}>✓</span>{p}
-                    </li>
-                  ))}
-                </ul>
-                <Link className="land-cta-btn" to="/register" style={{ display: "block", textAlign: "center", padding: "12px", border: `2px solid ${C.navy}`, borderRadius: "8px", color: C.navy, textDecoration: "none", fontSize: "13px", fontWeight: 700, transition: "all 0.2s" }}
-                  onMouseEnter={e => { e.target.style.background = C.navy; e.target.style.color = C.gold; }}
-                  onMouseLeave={e => { e.target.style.background = "transparent"; e.target.style.color = C.navy; }}
-                >
-                  Get Started as {r.role} →
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ════════════ CAMPUS LIFE BANNER ════════════ */}
-      <section style={{ position: "relative", minHeight: "440px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: "48px 0" }}>
-        <img src={gradImg} alt="Graduates" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 30%" }} />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, rgba(10,22,40,0.88) 0%, rgba(10,22,40,0.6) 100%)" }} />
-        <div style={{ position: "relative", zIndex: 2, textAlign: "center", padding: "0 24px" }}>
-          <h2 style={{ color: C.white, fontSize: "clamp(26px,4vw,46px)", fontWeight: 900, margin: "0 0 16px", textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>Built for Better Academic Outcomes</h2>
-          <p style={{ color: "rgba(255,255,255,0.82)", fontSize: "17px", maxWidth: "540px", margin: "0 auto 32px", lineHeight: 1.7 }}>
-            Join institutions that use AttendX to reduce manual work, improve accountability, and keep students on track throughout the semester.
-          </p>
-          <Link className="land-cta-btn" to="/register" style={S.btnGold}>Join Us Today →</Link>
-        </div>
-      </section>
-
-      {/* ════════════ STUDENTS SECTION ════════════ */}
-      <section className="land-section" style={{ padding: "100px 0", background: C.light }}>
-        <div style={S.container}>
-          <div className="land-two-col" style={{ display: "grid", gap: "64px", alignItems: "center" }}>
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              <span style={S.badge}>Student Experience</span>
-              <h2 style={{ ...S.h2, marginTop: "14px" }}>Student Visibility That Drives Better Attendance</h2>
-              <p style={S.para}>Students get their own dedicated portal to track attendance percentages, view subject-wise breakdowns, and receive proactive alerts before attendance becomes a concern.</p>
-              <div style={{ display: "flex", gap: "36px", marginTop: "28px", flexWrap: "wrap" }}>
-                {[["Live %", "Real-time attendance"], ["Alerts", "Auto 75% warnings"], ["History", "Full record access"]].map(([v, l]) => (
-                  <div key={v}>
-                    <div style={{ fontWeight: 900, fontSize: "24px", color: C.navy }}>{v}</div>
-                    <div style={{ fontSize: "13px", color: C.mid, marginTop: "4px" }}>{l}</div>
+                <div style={{ borderTop: "1px dashed var(--ax-border-strong)", paddingTop: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>Try the {ATTENDANCE_THRESHOLD}% maths yourself</span>
+                    <span className="ax-badge ax-badge-info">Interactive</span>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <img src={studentsImg} alt="Students" style={{ width: "100%", height: "360px", objectFit: "cover", borderRadius: "12px", boxShadow: "0 24px 64px rgba(10,22,40,0.15)" }} />
-            </div>
-          </div>
-        </div>
-      </section>
+                  <ThresholdCalculator />
+                </div>
+              </article>
 
-      {/* ════════════ CLASSROOM SECTION ════════════ */}
-      <section className="land-section" style={{ padding: "100px 0", background: C.white }}>
-        <div style={S.container}>
-          <div className="land-two-col-rev" style={{ display: "grid", gap: "64px", alignItems: "center" }}>
-            <div>
-              <img src={classImg} alt="Classroom" style={{ width: "100%", height: "360px", objectFit: "cover", borderRadius: "12px", boxShadow: "0 24px 64px rgba(10,22,40,0.15)" }} />
-            </div>
-            <div>
-              <span style={S.badge}>Faculty Experience</span>
-              <h2 style={{ ...S.h2, marginTop: "14px" }}>Built for Fast and Accurate Teaching Workflows</h2>
-              <p style={S.para}>Faculty members can mark attendance in seconds, review class trends, and focus more on teaching instead of repetitive admin tasks.</p>
-              <Link className="land-cta-btn" to="/login" style={{ ...S.btnNavy, marginTop: "24px", display: "inline-block" }}>Access Teacher Portal →</Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ════════════ TESTIMONIALS ════════════ */}
-      <section className="land-section land-tests-wrap" style={{ padding: "100px 0", background: C.navyMid }}>
-        <div style={S.container}>
-          <div style={{ ...S.sectionHeader, marginBottom: "48px" }}>
-            <h2 style={{ ...S.h2, color: C.white }}>Trusted by Administrators, Teachers, and Students</h2>
-            <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "16px" }}>Feedback from real users across daily campus operations.</p>
-          </div>
-          <div className="land-tests" style={{ display: "grid", gap: "30px" }}>
-            {TESTIMONIALS.map((t, i) => (
-              <div className="land-reveal-card land-test-card" key={i} style={{ background: "linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.05))", border: "1px solid rgba(255,255,255,0.16)", borderRadius: "16px", padding: "32px 28px", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", transition: "all .28s ease" }}
-                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.borderColor = "rgba(201,168,76,0.45)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.16)"; }}
-              >
-                <p style={{ color: "rgba(255,255,255,0.8)", fontSize: "15px", lineHeight: 1.8, marginBottom: "24px", fontStyle: "italic", margin: "0 0 24px" }}>"{t.quote}"</p>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div style={{ width: "46px", height: "46px", borderRadius: "50%", background: C.gold, color: C.navy, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "18px", flexShrink: 0 }}>{t.name.charAt(0)}</div>
+              {/* Parent emails */}
+              <article className="ax-card ax-card-hover lp-panel">
+                <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                  <span className="lp-panel-icon" style={{ background: "var(--ax-blue-soft)", color: "var(--ax-blue)" }}><Icon name="mail" size={20} /></span>
                   <div>
-                    <div style={{ color: C.white, fontWeight: 700, fontSize: "14px" }}>{t.name}</div>
-                    <div style={{ color: C.gold, fontSize: "12px", marginTop: "2px" }}>{t.role}</div>
+                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Automatic daily emails to parents</h3>
+                    <p className="lp-sub" style={{ fontSize: 14, marginTop: 4 }}>
+                      Every day at 6 PM, AttendX emails the parents of students who missed a class: which periods were missed
+                      and the student's overall attendance %.
+                    </p>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+                <div className="lp-email" aria-label="Example parent email">
+                  <div className="lp-email-head">
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <span><b>From:</b> AttendX</span>
+                      <span className="ax-badge ax-badge-gold" style={{ height: 22 }}><Icon name="clock" size={12} /> Sent 6:00 PM</span>
+                    </div>
+                    <span><b>Subject:</b> Daily Absence Summary: Kabir Singh</span>
+                  </div>
+                  <div className="lp-email-body">
+                    Dear Parent,
+                    <br />
+                    <b>Kabir Singh</b> was absent in the following classes today:
+                    <ul>
+                      <li>DBMS — Period 3, Section PA</li>
+                      <li>Networking — Period 5, Section PA</li>
+                    </ul>
+                    Overall attendance: <b style={{ color: "var(--ax-danger)" }}>72.4%</b> — below the required {ATTENDANCE_THRESHOLD}%.
+                  </div>
+                </div>
+                <p className="ax-help" style={{ margin: 0 }}>Example email with sample data. Admins can also send the day's summaries manually.</p>
+              </article>
+            </Reveal>
 
-      {/* ════════════ CTA ════════════ */}
-      <section id="contact" style={{ padding: "100px 0", background: C.light }}>
-        <div style={S.container}>
-          <div style={{ background: `linear-gradient(135deg, ${C.navy} 0%, ${C.navyMid} 100%)`, borderRadius: "20px", padding: "70px 48px", textAlign: "center", boxShadow: "0 20px 60px rgba(10,22,40,0.2)", position: "relative", overflow: "hidden" }}>
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: `linear-gradient(to right, ${C.gold}, ${C.goldL}, ${C.gold})` }} />
-            <span style={{ display: "inline-flex", width: "56px", height: "56px", alignItems: "center", justifyContent: "center", borderRadius: "12px", background: C.gold, color: C.navy, fontWeight: 900 }}>AX</span>
-            <h2 style={{ color: C.white, fontSize: "clamp(26px,3vw,40px)", fontWeight: 900, margin: "16px 0 14px" }}>Ready to Transform Your Campus?</h2>
-            <p style={{ color: "rgba(255,255,255,0.65)", fontSize: "16px", maxWidth: "500px", margin: "0 auto 36px", lineHeight: 1.75 }}>
-              Start with AttendX to centralize attendance data, improve institutional visibility, and deliver a smoother day-to-day experience for staff and students.
-            </p>
-            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", justifyContent: "center" }}>
-              {isAuthenticated ? (
-                <Link className="land-cta-btn" to={ROLE_REDIRECTS[user?.role] || "/"} style={S.btnGold}>Go to Dashboard →</Link>
-              ) : (
-                <>
-                  <Link className="land-cta-btn" to="/register" style={S.btnGold}>Create Account →</Link>
-                  <Link className="land-cta-btn" to="/login" style={{ ...S.btnGhost, borderColor: "rgba(255,255,255,0.4)" }}>Sign In</Link>
-                </>
-              )}
-            </div>
+            {/* Security */}
+            <Reveal group className="lp-sec-grid">
+              {[
+                { icon: "mail", title: "Email OTP verification", text: "New accounts confirm their email with a one-time code." },
+                { icon: "key", title: "JWT authentication", text: "Every API request is signed; sessions expire automatically." },
+                { icon: "shield", title: "Role-based access", text: "Admins, teachers and students only reach their own routes." },
+                { icon: "briefcase", title: "Approved teachers only", text: "Teacher accounts stay pending until a super admin approves them." },
+              ].map((s) => (
+                <div key={s.title} className="ax-card ax-card-hover lp-sec">
+                  <span className="lp-panel-icon" style={{ width: 38, height: 38, background: "#e8ecf6", color: "var(--ax-navy)" }}><Icon name={s.icon} size={18} /></span>
+                  <div>
+                    <h3>{s.title}</h3>
+                    <p>{s.text}</p>
+                  </div>
+                </div>
+              ))}
+            </Reveal>
           </div>
-        </div>
-      </section>
+        </section>
+
+        {/* ════════════ FINAL CTA ════════════ */}
+        <section aria-labelledby="lp-cta-title" style={{ paddingTop: 8 }}>
+          <div className="lp-wrap">
+            <Reveal className="lp-cta">
+              <img src={campusImg} alt="" loading="lazy" />
+              <span className="lp-eyebrow"><Icon name="clipboard" size={14} /> Ready when you are</span>
+              <h2 id="lp-cta-title" className="lp-h2" style={{ color: "#fff", margin: "18px auto 12px", maxWidth: 640 }}>
+                Take today's attendance in AttendX
+              </h2>
+              <p className="lp-lead" style={{ margin: "0 auto", fontSize: 16 }}>
+                Students and teachers can create an account now. Teacher accounts go live once a super admin approves them.
+              </p>
+              <div className="lp-cta-row" style={{ justifyContent: "center" }}>{authButtons("ax-btn-lg", true)}</div>
+            </Reveal>
+          </div>
+        </section>
+      </main>
 
       {/* ════════════ FOOTER ════════════ */}
-      <footer style={{ background: C.navy, padding: "64px 0 0" }}>
-        <div style={S.container}>
-          <div className="land-ftgrid" style={{ display: "grid", gap: "48px", paddingBottom: "48px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+      <footer className="lp-footer">
+        <div className="lp-wrap">
+          <div className="lp-footer-grid">
             <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-                <div style={{ width: "40px", height: "40px", background: C.gold, borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: C.navy, fontWeight: 900 }}>AX</div>
-                <div>
-                  <div style={{ color: C.white, fontWeight: 900, fontSize: "16px" }}>AttendX</div>
-                  <div style={{ color: C.gold, fontSize: "10px", letterSpacing: "2px" }}>ATTENDANCE OS</div>
-                </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <span className="lp-logo">AX</span>
+                <span style={{ color: "#fff", fontWeight: 800, fontSize: 17, letterSpacing: "-0.02em" }}>AttendX</span>
               </div>
-              <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "13px", lineHeight: 1.75, maxWidth: "240px" }}>Smart Attendance Management System for modern educational institutions.</p>
+              <p style={{ margin: 0, maxWidth: 340, lineHeight: 1.7 }}>
+                A college attendance system with role-based portals, period-wise marking, AI attendance tips and daily parent emails.
+              </p>
             </div>
             <div>
-              <h4 style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "18px", marginTop: 0 }}>Quick Links</h4>
-              {["About Us", "Admissions", "Academic Programs", "Faculty", "Contact"].map((l) => (
-                <div key={l} style={{ color: "rgba(255,255,255,0.45)", fontSize: "13px", marginBottom: "10px", cursor: "pointer" }}>{l}</div>
+              <h4>On this page</h4>
+              {NAV_LINKS.map((l) => (
+                <div key={l.id}><a href={`#${l.id}`} onClick={(e) => goTo(e, l.id)}>{l.label}</a></div>
               ))}
             </div>
             <div>
-              <h4 style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "18px", marginTop: 0 }}>Portals</h4>
-              {[["Admin Portal", "/login"], ["Teacher Portal", "/login"], ["Student Portal", "/login"], ["Register Now", "/register"]].map(([l, h]) => (
-                <div key={l}><Link to={h} style={{ color: "rgba(255,255,255,0.45)", fontSize: "13px", marginBottom: "10px", textDecoration: "none", display: "block" }}>{l}</Link></div>
-              ))}
-            </div>
-            <div>
-              <h4 style={{ color: C.gold, fontSize: "12px", fontWeight: 700, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "18px", marginTop: 0 }}>Contact</h4>
-              {["University Campus, Main Road", "+91 98765 43210", "admin@attendx.edu"].map((l) => (
-                <div key={l} style={{ color: "rgba(255,255,255,0.45)", fontSize: "13px", marginBottom: "10px" }}>{l}</div>
-              ))}
+              <h4>Get started</h4>
+              <div><Link to="/login">Sign in</Link></div>
+              <div><Link to="/register">Create account</Link></div>
+              <div><Link to="/register">Apply as a teacher</Link></div>
             </div>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "20px 0", color: "rgba(255,255,255,0.25)", fontSize: "12px", flexWrap: "wrap", gap: "8px" }}>
-            <span>© {new Date().getFullYear()} AttendX Software Inc. All rights reserved.</span>
-            <span>Enterprise Attendance Engineering</span>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingTop: 20, fontSize: 13, color: "rgba(255,255,255,0.45)" }}>
+            <span>© {new Date().getFullYear()} AttendX</span>
+            <span>Built with React, Node.js &amp; MongoDB</span>
           </div>
         </div>
       </footer>
-
-      <style>{`
-        @keyframes float {
-          0%, 100% {
-            transform: translateY(0px) translateX(0px);
-          }
-          33% {
-            transform: translateY(-20px) translateX(10px);
-          }
-          66% {
-            transform: translateY(10px) translateX(-10px);
-          }
-        }
-
-        @keyframes shimmer {
-          0% {
-            background-position: -1000px 0;
-          }
-          100% {
-            background-position: 1000px 0;
-          }
-        }
-
-        @keyframes pulse-glow {
-          0%, 100% {
-            box-shadow: 0 0 20px rgba(147, 197, 253, 0.5);
-          }
-          50% {
-            box-shadow: 0 0 40px rgba(147, 197, 253, 0.8);
-          }
-        }
-
-        .land-feature-card {
-          min-height: 250px;
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .land-feature-card::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(120deg, rgba(255,255,255,0.4), rgba(255,255,255,0.1), rgba(255,255,255,0));
-          pointer-events: none;
-        }
-
-        .land-role-card, .land-test-card {
-          min-height: 250px;
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .land-role-card::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(120deg, rgba(191,219,254,0.18), rgba(255,255,255,0));
-          pointer-events: none;
-        }
-        
-        .land-test-card::before {
-          content: "";
-          position: absolute;
-          top: -30%;
-          right: -20%;
-          width: 180px;
-          height: 180px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(201,168,76,0.22) 0%, rgba(201,168,76,0) 70%);
-          pointer-events: none;
-        }
-
-        /* Feature card hover effects */
-        .land-feature-card:hover {
-          animation: none;
-        }
-
-        /* Reveal animation for cards */
-        .land-reveal-card {
-          animation: cardReveal 0.7s ease-out;
-        }
-
-        @keyframes cardReveal {
-          from {
-            opacity: 0;
-            transform: translateY(20px) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-      `}</style>
     </div>
   );
-};
-
-// ─── Shared Styles ────────────────────────────────────────────────────────────
-const S = {
-  container: { maxWidth: "1200px", margin: "0 auto", padding: "0 28px" },
-  sectionHeader: { textAlign: "center", marginBottom: "60px" },
-  badge: { display: "inline-block", background: "#eef2fb", color: C.navy, padding: "6px 18px", borderRadius: "30px", fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", border: `1px solid ${C.border}` },
-  h2: { fontSize: "clamp(24px,3vw,36px)", fontWeight: 900, color: C.navy, margin: "14px 0 16px", lineHeight: 1.2 },
-  para: { color: C.mid, fontSize: "15px", lineHeight: 1.8, marginBottom: "14px" },
-  // Buttons
-  btnGold: { background: C.gold, color: C.navy, padding: "11px 26px", borderRadius: "7px", fontSize: "14px", fontWeight: 800, textDecoration: "none", display: "inline-block", border: `2px solid ${C.gold}`, transition: "all 0.2s" },
-  btnGhost: { background: "transparent", color: C.white, border: "2px solid rgba(255,255,255,0.45)", padding: "11px 26px", borderRadius: "7px", fontSize: "14px", fontWeight: 600, textDecoration: "none", display: "inline-block" },
-  btnNavy: { background: C.navy, color: C.white, padding: "13px 32px", borderRadius: "7px", fontSize: "14px", fontWeight: 700, textDecoration: "none", display: "inline-block", border: `2px solid ${C.navy}` },
-  btnHeroGold: { background: C.gold, color: C.navy, padding: "14px 36px", borderRadius: "8px", fontSize: "15px", fontWeight: 800, textDecoration: "none", display: "inline-block", border: `2px solid ${C.gold}`, boxShadow: "0 4px 20px rgba(201,168,76,0.35)" },
-  btnHeroGhost: { background: "transparent", color: C.white, border: "2px solid rgba(255,255,255,0.45)", padding: "14px 36px", borderRadius: "8px", fontSize: "15px", fontWeight: 600, textDecoration: "none", display: "inline-block" },
 };
 
 export default Landing;

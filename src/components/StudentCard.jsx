@@ -1,127 +1,95 @@
 import { Link } from "react-router-dom";
 import { ATTENDANCE_THRESHOLD } from "../utils/constants";
+import { Avatar, Icon, ProgressBar } from "./ui";
 
-const AVATAR_COLORS = [
-  "from-blue-600 to-indigo-600",
-  "from-emerald-600 to-teal-600",
-  "from-violet-600 to-purple-600",
-  "from-amber-600 to-orange-600",
-  "from-rose-600 to-pink-600",
-];
-
+/*
+  Student tile used by the admin Students list (grid view).
+  Attendance is shown only when the API sends it; otherwise "No data".
+*/
 const StudentCard = ({ student, onDelete, onLinkUser }) => {
-  const colorIdx =
-    (student.rollNumber?.charCodeAt(0) || 0) % AVATAR_COLORS.length;
-  const attendancePct = student.attendancePercentage ?? null;
-  const isLow =
-    attendancePct !== null && attendancePct < ATTENDANCE_THRESHOLD;
+  const pct = typeof student.attendancePercentage === "number" ? student.attendancePercentage : null;
+  const isLow = pct !== null && pct < ATTENDANCE_THRESHOLD;
+  const roll = student.classRollNumber ?? student.rollNumber;
 
   return (
-    <div className="bg-white/80 border border-white/60 hover:border-blue-300 rounded-2xl p-5 transition-all duration-300 group relative overflow-hidden backdrop-blur-md shadow-[0_12px_28px_rgba(10,22,40,0.10)] hover:-translate-y-1">
-      {/* Low attendance top bar */}
+    <article
+      className="ax-card ax-card-hover"
+      style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14, height: "100%", position: "relative", overflow: "hidden" }}
+    >
       {isLow && (
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-rose-500/70" />
+        <span aria-hidden="true" style={{ position: "absolute", inset: "0 0 auto 0", height: 3, background: "var(--ax-danger)" }} />
       )}
 
-      <div className="flex items-start gap-4">
-        {/* Avatar */}
-        <div
-          className={`w-12 h-12 rounded-xl bg-gradient-to-br ${AVATAR_COLORS[colorIdx]} flex items-center justify-center flex-shrink-0`}
-        >
-          <span className="text-white font-bold text-lg">
-            {student.name?.charAt(0)?.toUpperCase() || "?"}
-          </span>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <Avatar name={student.name} size={44} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h3
+            title={student.name}
+            style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--ax-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
+            {student.name || "Unnamed student"}
+          </h3>
+          <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, color: "var(--ax-muted)", marginTop: 2 }}>
+            {student.registrationNumber || "—"}
+          </div>
         </div>
+        {student.userId ? (
+          <span className="ax-badge ax-badge-success" title="Linked to a student login">
+            <Icon name="check" size={11} /> Linked
+          </span>
+        ) : (
+          <span className="ax-badge" title="No student login linked yet">Not linked</span>
+        )}
+      </div>
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h3 className="font-semibold text-slate-900 truncate">
-                {student.name}
-              </h3>
-              <p className="text-slate-500 text-sm font-mono">
-                {student.rollNumber || student.registrationNumber}
-              </p>
-            </div>
-            {attendancePct !== null && (
-              <span
-                className={`text-xs px-2.5 py-1 rounded-full font-mono font-medium border flex-shrink-0 ${
-                  isLow
-                    ? "bg-rose-100 text-rose-700 border-rose-200"
-                    : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                }`}
-              >
-                {attendancePct}%
-              </span>
-            )}
-          </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {student.section ? (
+          <span className="ax-badge ax-badge-info">Section {student.section}</span>
+        ) : (
+          <span className="ax-badge ax-badge-warning">Unassigned</span>
+        )}
+        {student.semester != null && <span className="ax-badge">Sem {student.semester}</span>}
+        {roll != null && <span className="ax-badge">Roll {roll}</span>}
+        {student.department && <span className="ax-badge">{student.department}</span>}
+      </div>
 
-          <div className="mt-2 flex flex-wrap gap-2">
-            {student.section && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600">
-                Section {student.section}
-              </span>
-            )}
-            {student.email && (
-              <span className="text-xs text-slate-500 truncate max-w-[150px]">
-                {student.email}
-              </span>
-            )}
-          </div>
-
-          {/* Attendance bar */}
-          {attendancePct !== null && (
-            <div className="mt-3 h-1 bg-slate-200 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-700 ${
-                  isLow ? "bg-rose-500" : "bg-emerald-500"
-                }`}
-                style={{ width: `${attendancePct}%` }}
-              />
-            </div>
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, marginBottom: 6 }}>
+          <span style={{ color: "var(--ax-muted)", fontWeight: 600 }}>Attendance</span>
+          {pct === null ? (
+            <span style={{ color: "var(--ax-muted)" }}>No data</span>
+          ) : (
+            <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              {isLow && <span className="ax-badge ax-badge-danger">Low</span>}
+              <strong style={{ color: isLow ? "var(--ax-danger)" : "var(--ax-text)", fontVariantNumeric: "tabular-nums" }}>{pct}%</strong>
+            </span>
           )}
         </div>
+        <ProgressBar value={pct ?? 0} threshold={ATTENDANCE_THRESHOLD} />
       </div>
 
-      {/* Actions */}
-      <div className="mt-4 pt-4 border-t border-slate-200 flex items-center gap-2">
+      <div style={{ display: "flex", gap: 8, marginTop: "auto", paddingTop: 12, borderTop: "1px solid var(--ax-border)" }}>
+        <Link to={`/admin/students/${student._id}/analytics`} className="ax-btn ax-btn-secondary ax-btn-sm" style={{ flex: 1 }}>
+          <Icon name="chart" size={14} /> Analytics
+        </Link>
         {onLinkUser && !student.userId && (
-          <button
-            onClick={() => onLinkUser(student)}
-            className="text-xs px-3 py-2 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
-          >
-            Link User
+          <button type="button" className="ax-btn ax-btn-gold ax-btn-sm" onClick={() => onLinkUser(student)}>
+            <Icon name="key" size={14} /> Link
           </button>
         )}
-        <Link
-          to={`/admin/students/${student._id}/analytics`}
-          className="flex-1 text-center text-xs py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-        >
-          View Analytics
-        </Link>
         {onDelete && (
           <button
+            type="button"
+            className="ax-btn ax-btn-danger ax-btn-sm"
             onClick={() => onDelete(student._id)}
-            className="p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-100 transition-all"
+            aria-label={`Delete ${student.name}`}
+            title="Delete student"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
+            <Icon name="x" size={14} />
           </button>
         )}
       </div>
-    </div>
+    </article>
   );
 };
 

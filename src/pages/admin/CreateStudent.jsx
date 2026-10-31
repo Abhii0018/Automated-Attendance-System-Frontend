@@ -1,195 +1,348 @@
-import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { gsap } from "gsap";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import studentService from "../../services/studentService";
+import { PageHeader, Alert, Icon, Avatar } from "../../components/ui";
+import useToast from "../../hooks/useToast";
 
+const EMPTY_FORM = {
+  name: "",
+  department: "Computer Science",
+  parentEmail: "",
+  parentPhone: "",
+};
+
+const FIELD_ORDER = ["name", "department", "parentEmail", "parentPhone"];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const REDIRECT_MS = 1800;
+
+// Mirrors the backend validator: name & department required, valid email, phone ≥ 10 characters.
+const validate = (f) => {
+  const e = {};
+  if (!f.name.trim()) e.name = "Enter the student's full name.";
+  if (!f.department.trim()) e.department = "Department is required.";
+  const email = f.parentEmail.trim();
+  if (!email) e.parentEmail = "Parent email is required.";
+  else if (!EMAIL_RE.test(email)) e.parentEmail = "Enter a valid email address, e.g. name@example.com.";
+  const phone = f.parentPhone.trim();
+  if (!phone) e.parentPhone = "Parent phone is required.";
+  else if (phone.length < 10) e.parentPhone = `Phone number must be at least 10 digits (${phone.length}/10).`;
+  return e;
+};
+
+// ─── Small local building blocks ────────────────────────────────────────────
+const Field = ({ id, label, required, hint, error, children }) => (
+  <div style={{ minWidth: 0 }}>
+    <label htmlFor={id} className="ax-label">
+      {label}
+      {required && (
+        <span aria-hidden="true" style={{ color: "var(--ax-danger)", marginLeft: 3 }}>*</span>
+      )}
+    </label>
+    {children}
+    {error ? (
+      <p id={`${id}-error`} className="ax-help ax-fade-up" style={{ color: "var(--ax-danger)", display: "flex", gap: 6, alignItems: "flex-start" }}>
+        <Icon name="alert" size={13} style={{ marginTop: 1 }} />
+        <span>{error}</span>
+      </p>
+    ) : (
+      <p id={`${id}-hint`} className="ax-help">{hint}</p>
+    )}
+  </div>
+);
+
+const IconInput = ({ icon, valid, ...props }) => (
+  <div style={{ position: "relative" }}>
+    <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--ax-muted)", display: "inline-flex", pointerEvents: "none" }}>
+      <Icon name={icon} size={16} />
+    </span>
+    <input className="ax-input" style={{ paddingLeft: 38, paddingRight: valid ? 36 : 12 }} {...props} />
+    {valid && (
+      <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "var(--ax-success)", display: "inline-flex", pointerEvents: "none" }}>
+        <Icon name="check" size={16} />
+      </span>
+    )}
+  </div>
+);
+
+const SectionHeading = ({ icon, title, subtitle, id }) => (
+  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>
+    <span style={{ width: 36, height: 36, borderRadius: 10, background: "var(--ax-blue-soft)", color: "var(--ax-blue)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <Icon name={icon} size={18} />
+    </span>
+    <div style={{ minWidth: 0 }}>
+      <h2 id={id} className="ax-section-title">{title}</h2>
+      {subtitle && <p className="ax-section-sub">{subtitle}</p>}
+    </div>
+  </div>
+);
+
+const SummaryRow = ({ label, value, placeholder, mono }) => (
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--ax-border)", fontSize: 13 }}>
+    <span style={{ color: "var(--ax-muted)", flexShrink: 0 }}>{label}</span>
+    {value ? (
+      <span style={{ color: "var(--ax-text)", fontWeight: 600, textAlign: "right", overflowWrap: "anywhere", minWidth: 0, fontFamily: mono ? "ui-monospace, SFMono-Regular, Menlo, monospace" : undefined, letterSpacing: mono ? "0.08em" : undefined }}>
+        {value}
+      </span>
+    ) : (
+      <span style={{ color: "var(--ax-muted)", fontStyle: "italic", textAlign: "right" }}>{placeholder}</span>
+    )}
+  </div>
+);
+
+// ─── Page ───────────────────────────────────────────────────────────────────
 const CreateStudent = () => {
-  const [form, setForm] = useState({
-    name: "",
-    department: "Computer Science",
-    parentEmail: "",
-    parentPhone: "",
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [created, setCreated] = useState(null); // student record returned by the API
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState("");
+  const [touched, setTouched] = useState({});
+  const [attempted, setAttempted] = useState(false);
   const navigate = useNavigate();
-  const cardRef = useRef(null);
+  const toast = useToast();
+  const formRef = useRef(null);
+  const redirectTimer = useRef(null);
 
-  useEffect(() => {
-    gsap.fromTo(
-      cardRef.current,
-      { opacity: 0, y: 20 },
-      { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }
-    );
-  }, []);
+  // Never leave a pending redirect behind if the page unmounts.
+  useEffect(() => () => clearTimeout(redirectTimer.current), []);
+
+  const errors = useMemo(() => validate(form), [form]);
+  const validCount = FIELD_ORDER.filter((k) => !errors[k]).length;
+  const isReady = validCount === FIELD_ORDER.length;
+  const pct = Math.round((validCount / FIELD_ORDER.length) * 100);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const showError = (k) => ((touched[k] || attempted) && errors[k]) || "";
+
+  const inputProps = (k, id) => {
+    const err = showError(k);
+    return {
+      id,
+      name: k,
+      value: form[k],
+      onChange: handleChange,
+      onBlur: () => setTouched((prev) => ({ ...prev, [k]: true })),
+      required: true,
+      "aria-required": "true",
+      "aria-invalid": err ? "true" : "false",
+      "aria-describedby": err ? `${id}-error` : `${id}-hint`,
+      valid: !errors[k] && (touched[k] || attempted),
+      disabled: loading,
+    };
+  };
+
+  const cancelRedirect = () => {
+    clearTimeout(redirectTimer.current);
+    setRedirecting(false);
+  };
+
+  const resetForm = () => {
+    cancelRedirect();
+    setSuccess(false);
+    setCreated(null);
+    setForm(EMPTY_FORM);
+    setTouched({});
+    setAttempted(false);
+    setError("");
+  };
+
+  const go = (path) => {
+    cancelRedirect();
+    navigate(path);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setAttempted(true);
+
+    const firstInvalid = FIELD_ORDER.find((k) => errors[k]);
+    if (firstInvalid) {
+      formRef.current?.querySelector(`[name="${firstInvalid}"]`)?.focus();
+      return;
+    }
+
     setError("");
     setLoading(true);
     try {
-      await studentService.createStudent(form);
+      const res = await studentService.createStudent(form);
+      const student = res?.data || null;
+      setCreated(student);
       setSuccess(true);
-      gsap.fromTo(
-        ".success-box",
-        { scale: 0.9, opacity: 0 },
-        { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.5)" }
+      toast.success(
+        student?.registrationNumber
+          ? `Student created · Reg. No. ${student.registrationNumber}`
+          : "Student created"
       );
-      setTimeout(() => navigate("/admin/take-admission"), 1800);
+      setRedirecting(true);
+      redirectTimer.current = setTimeout(() => navigate("/admin/take-admission"), REDIRECT_MS);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to create student.");
+      const msg = err.response?.data?.message || err.response?.data?.errors?.[0]?.msg || "Failed to create student.";
+      setError(msg);
+      toast.error("Couldn't create the student.");
     } finally {
       setLoading(false);
     }
   };
 
-  const inputClass =
-    "w-full bg-white/90 border border-slate-200 focus:border-blue-400 text-slate-900 placeholder-slate-500 rounded-lg px-4 py-3 outline-none transition-all duration-200 text-sm shadow-[0_6px_14px_rgba(10,22,40,0.06)]";
+  const breadcrumb = (
+    <nav aria-label="Breadcrumb" className="ax-fade-up" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ax-muted)", marginBottom: 14, flexWrap: "wrap" }}>
+      <Link to="/admin/students" className="ax-btn ax-btn-ghost ax-btn-sm" style={{ paddingLeft: 8, marginLeft: -8 }}>
+        <Icon name="arrowLeft" size={15} /> Students
+      </Link>
+      <Icon name="chevronRight" size={14} />
+      <span aria-current="page" style={{ color: "var(--ax-text-2)", fontWeight: 600 }}>Create student</span>
+    </nav>
+  );
 
+  // ── Success state ───────────────────────────────────────────────────────────
   if (success) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_8%_10%,#c7d2fe_0%,#eaf1ff_30%,#e9eefc_64%,#eef2ff_100%)] pt-16 flex items-center justify-center">
-        <div className="success-box bg-white/85 border border-white/60 rounded-2xl p-12 text-center max-w-sm w-full mx-4 shadow-[0_16px_34px_rgba(10,22,40,0.12)]">
-          <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-5">
-            <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+      <div className="ax-page">
+        <div className="ax-container">
+          {breadcrumb}
+          <div className="ax-card ax-card-pad ax-fade-up" role="status" style={{ maxWidth: 520, margin: "8px auto 0", textAlign: "center" }}>
+            <div style={{ width: 60, height: 60, borderRadius: "50%", margin: "6px auto 14px", background: "var(--ax-success-soft)", color: "var(--ax-success)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Icon name="checkCircle" size={30} />
+            </div>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "var(--ax-text)", letterSpacing: "-0.01em" }}>Student created</h1>
+            <p style={{ margin: "6px 0 18px", color: "var(--ax-muted)", fontSize: 14 }}>
+              {created?.name ? `${created.name}'s profile has been saved.` : "The student profile has been saved."}
+            </p>
+
+            {created && (
+              <div style={{ textAlign: "left", marginBottom: 18 }}>
+                {created.registrationNumber && <SummaryRow label="Registration no." value={String(created.registrationNumber)} mono />}
+                {created.department && <SummaryRow label="Department" value={created.department} />}
+                {created.assignedSemester != null && <SummaryRow label="Semester" value={`Semester ${created.assignedSemester}`} />}
+                {created.assignedSection && <SummaryRow label="Section" value={created.assignedSection} />}
+                {created.assignedRollNumber != null && <SummaryRow label="Roll number" value={String(created.assignedRollNumber)} />}
+              </div>
+            )}
+
+            {redirecting ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", fontSize: 13, color: "var(--ax-muted)" }}>
+                <span className="ax-spinner" aria-hidden="true" style={{ color: "var(--ax-blue)" }} />
+                <span>Redirecting to the admission workspace…</span>
+                <button type="button" onClick={cancelRedirect} className="ax-btn ax-btn-ghost ax-btn-sm">Stay here</button>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                <button type="button" onClick={resetForm} className="ax-btn ax-btn-primary">
+                  <Icon name="userPlus" size={16} /> Add another
+                </button>
+                <button type="button" onClick={() => go("/admin/students")} className="ax-btn ax-btn-secondary">
+                  <Icon name="users" size={16} /> View students
+                </button>
+                <button type="button" onClick={() => go("/admin/take-admission")} className="ax-btn ax-btn-ghost" style={{ gridColumn: "1 / -1" }}>
+                  Go to admission workspace <Icon name="arrowRight" size={15} />
+                </button>
+              </div>
+            )}
           </div>
-          <h2 className="font-bold text-xl text-slate-900 mb-2">Student Created!</h2>
-          <p className="text-slate-600 text-sm">Redirecting to admission workspace…</p>
         </div>
       </div>
     );
   }
 
+  // ── Form ────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_8%_10%,#c7d2fe_0%,#eaf1ff_30%,#e9eefc_64%,#eef2ff_100%)] pt-16">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+    <div className="ax-page">
+      <div className="ax-container">
+        {breadcrumb}
+        <PageHeader
+          eyebrow="Admin"
+          title="Create student"
+          subtitle="Create the core student profile before full admission."
+        />
 
-        {/* Header */}
-        <div className="mb-8">
-          <p className="text-blue-700 text-xs font-mono uppercase tracking-widest mb-2">
-            Admin
-          </p>
-          <h1 className="font-bold text-4xl text-slate-900">Create Student</h1>
-          <p className="text-slate-600 mt-1 text-sm">
-            Create core student profile before full admission.
-          </p>
-        </div>
-
-        <div
-          ref={cardRef}
-          className="opacity-0 bg-white/85 border border-white/60 rounded-2xl p-8 shadow-[0_16px_34px_rgba(10,22,40,0.11)]"
-        >
-          {/* Error */}
-          {error && (
-            <div className="mb-6 px-4 py-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-600 text-sm flex items-center gap-2">
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+        {error && (
+          <div style={{ marginBottom: 20 }}>
+            <Alert tone="danger" title="Couldn't create student" onClose={() => setError("")}>
               {error}
-            </div>
-          )}
+            </Alert>
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] items-start">
+          <form ref={formRef} onSubmit={handleSubmit} noValidate className="ax-card ax-card-pad ax-fade-up" style={{ minWidth: 0 }}>
+            <section aria-labelledby="cs-student">
+              <SectionHeading id="cs-student" icon="user" title="Student details" subtitle="Who is being enrolled." />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field id="cs-name" label="Full name" required hint="As it should appear on records." error={showError("name")}>
+                  <IconInput icon="user" type="text" placeholder="John Doe" autoComplete="off" {...inputProps("name", "cs-name")} />
+                </Field>
+                <Field id="cs-dept" label="Department" required hint="Defaults to Computer Science." error={showError("department")}>
+                  <IconInput icon="building" type="text" placeholder="Computer Science" {...inputProps("department", "cs-dept")} />
+                </Field>
+              </div>
+            </section>
 
-            {/* Row 1 */}
-            <div className="grid sm:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-sm text-slate-700 mb-2">
-                  Full Name <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  className={inputClass}
-                  type="text"
-                  name="name"
-                  placeholder="John Doe"
-                  value={form.name}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-700 mb-2">
-                  Department <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  className={inputClass}
-                  type="text"
-                  name="department"
-                  placeholder="Computer Science"
-                  value={form.department}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-            </div>
+            <hr style={{ border: 0, borderTop: "1px solid var(--ax-border)", margin: "22px 0" }} />
 
-            {/* Row 2 */}
-            <div className="grid sm:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-sm text-slate-700 mb-2">
-                  Parent Email <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  className={inputClass}
-                  type="email"
-                  name="parentEmail"
-                  placeholder="parent@example.com"
-                  value={form.parentEmail}
-                  onChange={handleChange}
-                  required
-                />
+            <section aria-labelledby="cs-parent">
+              <SectionHeading id="cs-parent" icon="shield" title="Parent / guardian" subtitle="Contact used for attendance notifications." />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field id="cs-email" label="Parent email" required hint="Attendance alerts are emailed here." error={showError("parentEmail")}>
+                  <IconInput icon="mail" type="email" inputMode="email" placeholder="parent@example.com" autoComplete="off" {...inputProps("parentEmail", "cs-email")} />
+                </Field>
+                <Field id="cs-phone" label="Parent phone" required hint="At least 10 digits." error={showError("parentPhone")}>
+                  <IconInput icon="phone" type="tel" inputMode="tel" placeholder="9876543210" autoComplete="off" {...inputProps("parentPhone", "cs-phone")} />
+                </Field>
               </div>
-              <div>
-                <label className="block text-sm text-slate-700 mb-2">
-                  Parent Phone <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  className={inputClass}
-                  type="tel"
-                  name="parentPhone"
-                  placeholder="9876543210"
-                  value={form.parentPhone}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-            </div>
+            </section>
 
-            {/* Actions */}
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all duration-200"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creating…
-                  </>
-                ) : (
-                  "Create Student"
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/admin/students")}
-                className="px-6 py-3 rounded-lg border border-slate-300 hover:border-slate-400 text-slate-600 hover:text-slate-900 text-sm transition-all duration-200"
-              >
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3" style={{ marginTop: 24, paddingTop: 18, borderTop: "1px solid var(--ax-border)" }}>
+              <button type="button" onClick={() => navigate("/admin/students")} className="ax-btn ax-btn-secondary">
                 Cancel
               </button>
+              <button type="submit" disabled={loading} aria-busy={loading} className="ax-btn ax-btn-primary">
+                {loading ? (
+                  <><span className="ax-spinner" aria-hidden="true" /> Creating…</>
+                ) : (
+                  <><Icon name="userPlus" size={16} /> Create student</>
+                )}
+              </button>
             </div>
-
           </form>
+
+          {/* ── Live preview ─────────────────────────────────────────────── */}
+          <aside className="ax-card ax-card-pad ax-fade-up lg:sticky lg:top-[88px]" aria-labelledby="cs-preview-title" style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
+              <h2 id="cs-preview-title" className="ax-section-title">Profile preview</h2>
+              <span className={`ax-badge ${isReady ? "ax-badge-success" : "ax-badge-gold"}`}>{isReady ? "Ready" : "Draft"}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, minWidth: 0 }}>
+              <Avatar name={form.name || "?"} size={46} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: form.name.trim() ? "var(--ax-text)" : "var(--ax-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {form.name.trim() || "New student"}
+                </div>
+                <div style={{ fontSize: 13, color: "var(--ax-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {form.department.trim() || "No department"}
+                </div>
+              </div>
+            </div>
+            <SummaryRow label="Parent email" value={form.parentEmail.trim()} placeholder="Not entered" />
+            <SummaryRow label="Parent phone" value={form.parentPhone.trim()} placeholder="Not entered" />
+            <SummaryRow label="Registration no." placeholder="Generated on save" />
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--ax-muted)", marginBottom: 6 }}>
+                <span>Required fields</span>
+                <span style={{ fontWeight: 600, color: "var(--ax-text-2)" }}>{validCount}/{FIELD_ORDER.length} complete</span>
+              </div>
+              <div className="ax-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Form completion">
+                <span style={{ width: `${pct}%`, background: isReady ? "var(--ax-success)" : "linear-gradient(90deg, var(--ax-gold-2), var(--ax-gold))" }} />
+              </div>
+            </div>
+            <p className="ax-help" style={{ marginTop: 12 }}>
+              After saving you&apos;ll be taken to the admission workspace.
+            </p>
+          </aside>
         </div>
       </div>
     </div>
